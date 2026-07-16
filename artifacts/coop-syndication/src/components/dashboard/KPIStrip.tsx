@@ -1,32 +1,33 @@
 import React from 'react';
-import { DealModel, EngineInputs } from '@/utils/engine';
+import { DealModel } from '@/utils/engine';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 
-export function KPIStrip({ model, inputs }: { model: DealModel; inputs: EngineInputs }) {
-  const y0Liq = model.seller.year0NetLiquidity;
+export function KPIStrip({ model }: { model: DealModel }) {
+  const hr = model.seller.headroom;
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
       <KPICard 
-        title="Seller Y0 Net Liquidity" 
-        value={formatCurrency(y0Liq)} 
-        valueClass={y0Liq < 0 ? 'text-destructive' : 'text-emerald-500'}
+        title="Y1 Tax Headroom" 
+        value={formatCurrency(hr)} 
+        valueClass={hr < 0 ? 'text-destructive' : 'text-emerald-500'}
       />
       <KPICard 
-        title="Seller Total Post-Tax Cash" 
-        value={formatCurrency(model.seller.totalPostTaxCash)} 
+        title="Required Capital" 
+        value={formatCurrency(model.investor.requiredCapitalInjection)} 
       />
       <KPICard 
-        title="Investor IRR" 
-        value={model.investor.irr !== null ? formatPercent(model.investor.irr * 100) : 'N/A'} 
-        subtitle={`${model.investor.moic.toFixed(2)}x MOIC`}
+        title="Y1 OBBBA Shield" 
+        value={formatCurrency(model.investor.year1BonusShield)} 
+        valueClass="text-emerald-500"
       />
       <KPICard 
-        title="Year 1 Depr Shield" 
-        value={formatCurrency(model.investor.year1DepreciationShield)} 
+        title="Phase 1 Rent" 
+        value={formatCurrency(model.tenant.phase1MonthlyRent)} 
+        subtitle={`${model.tenant.rentDelta > 0 ? '+' : ''}${formatCurrency(model.tenant.rentDelta)} vs current`}
       />
       <KPICard 
-        title="Phase 2 Rent Jump" 
-        value={formatPercent(model.tenant.rentJumpPct)} 
+        title="Phase 2 Jump" 
+        value={`${model.tenant.rentJumpPct > 0 ? '+' : ''}${formatPercent(model.tenant.rentJumpPct)}`} 
         valueClass={model.tenant.isRentCliff ? 'text-destructive' : 'text-emerald-500'}
       />
     </div>

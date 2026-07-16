@@ -1,0 +1,70 @@
+# ROLE: Principal Financial Architect & Senior React SPA Engineer
+
+You are building an institutional-grade Real Estate Limited-Equity Co-op Syndication Dashboard. Your objective is to build a React Single Page Application (SPA) utilizing Tailwind CSS and Recharts (or rich HTML tables) that models the exact tax and cash flow friction points between a Seller, a Syndicate of Investors, and a Tenant Co-op.
+
+## CRITICAL DIRECTIVES & ORDER OF OPERATIONS
+Do NOT create circular dependencies. Follow this exact flow:
+1. Read Global State.
+2. Calculate Seller's Year 1 Tax Liability & Note parameters.
+3. Calculate Investor Capital Requirements & MACRS Depreciation.
+4. Calculate Tenant Revenue Required & Rent Deltas.
+5. Render UI. 
+
+Do NOT hallucinate tax law. Use the exact algebraic logic provided below.
+
+## GLOBAL STATE (Variables & Sliders)
+
+**Property & Tenant Baseline:**
+- `units`: (Integer: 10 - 50, default 24)
+- `currentRent`: ($400 - $1500, default $700)
+- `vacancyRate`: (0% - 15%, step 1%, default 4%)
+- `propertyTaxes`: ($10k - $50k, default $28472)
+- `annualInsuranceMisc`: ($5k - $30k, default $15000)
+- `mgmtFeePerDoor`: ($0 - $150, default $50)
+
+**Seller's Financial Reality:**
+- `totalFMV`: ($1M - $3M, step $50k, default $1.5M)
+- `originalCostBasis`: 1993 Transferred Basis ($0 - $1M, step $10k, default $250k)
+- `accumulatedDepreciation`: Total past depreciation taken by seller ($0 - $1M, step $10k, default $300k)
+- `cltLandDonation`: Value of land donated to trust ($0 - $1M, step $10k, default $440k)
+
+**The Deal Structure:**
+- `sellerDownPaymentPct`: (0% - 30%, step 1%, default 15%)
+- `sellerInterestRate`: (3% - 10%, step 0.25%, default 6%)
+- `noteTermYears`: (5 - 30, step 1, default 20)
+- `balloonYear`: (1 - 10, step 1, default 5)
+- `phase2CommercialRate`: Year 6 Refinance Rate (4% - 10%, step 0.25%, default 7%)
+
+**Investor New CapEx Buckets:**
+- `capexRoofStruct`: 27.5-Year MACRS ($0 - $200k, default $90k)
+- `capexParkingLand`: 15-Year MACRS ($0 - $100k, default $50k)
+- `capexAppliances`: 5-Year MACRS ($0 - $100k, default $40k)
+
+## THE ALGEBRAIC ENGINE
+
+**1. The Seller's Crucible:**
+- `Note Principal` = `totalFMV` - `cltLandDonation`
+- `Down Payment Received` = `Note Principal` * (`sellerDownPaymentPct` / 100)
+- `Adjusted Basis` = `originalCostBasis` - `accumulatedDepreciation`
+- `Gross Profit %` = MAX(0, (`totalFMV` - `Adjusted Basis`) / `totalFMV`)
+- `Year 1 Recapture Tax` = `accumulatedDepreciation` * 0.25
+- `Year 1 CapGains Tax` = (`Down Payment Received` * `Gross Profit %`) * 0.15
+- `Total Year 1 Tax Liability` = `Year 1 Recapture Tax` + `Year 1 CapGains Tax`
+- **UI ALERT:** If `Total Year 1 Tax Liability` > `Down Payment Received`, flash a RED warning: "CRITICAL: Down Payment does not clear Year 1 IRS § 453(i) Recapture & CapGains."
+
+**2. The Investor Profile (Capital & Yield):**
+- `Total New CapEx` = `capexRoofStruct` + `capexParkingLand` + `capexAppliances`
+- `Required Capital Injection` = `Down Payment Received` + `Total New CapEx`
+- `Year 1 OBBBA Bonus Depreciation Shield` = `capexParkingLand` + `capexAppliances` + ((`totalFMV` * 0.75) * 0.30). *(Assumes 100% bonus on 5/15yr new CapEx, plus 30% segregated bonus on the acquired building).*
+- **UI ALERT:** Note that passive investors cannot use this shield against W-2 income without IRC § 469(c)(7) REPS status.
+
+**3. The Tenant Rent Cliff:**
+- `Phase 1 Annual Revenue Req` = `calculatePMT(sellerInterestRate, noteTermYears, (Note Principal - Down Payment Received))` + `propertyTaxes` + `annualInsuranceMisc` + (`mgmtFeePerDoor` * `units` * 12).
+- `Phase 1 Monthly Rent` = (`Phase 1 Annual Revenue Req` / `units` / 12) / (1 - (`vacancyRate` / 100)).
+- `Rent Delta` = `Phase 1 Monthly Rent` - `currentRent`.
+- `Phase 2 Refinance Burden` = Balloon balance at month (`balloonYear` * 12) + `Required Capital Injection`.
+- `Phase 2 Monthly Rent` = Same formula as Phase 1, but swap the PMT to use `Phase 2 Refinance Burden` amortized over 30 years at `phase2CommercialRate`, and inflate mgmt fees by 15%.
+- **UI ALERT:** If `Phase 2 Monthly Rent` > `Phase 1 Monthly Rent` by more than 10%, highlight Phase 2 Rent in RED.
+
+## DELIVERABLES
+Build the UI using a dark, executive slate theme (`bg-zinc-950`). Group the input sliders logically on a left-hand sidebar. Build three distinct data cards (Seller, Investor, Tenant) in the main view. Use rich, cleanly formatted tables for the outputs. Implement the algebraic logic exactly as written to avoid render loops.

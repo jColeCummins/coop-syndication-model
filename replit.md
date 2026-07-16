@@ -26,27 +26,23 @@ A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limi
 ## Architecture decisions
 
 - Frontend-only: all financial math runs client-side for instant slider reactivity; no API calls
-- V3 (current): engine/UI separation — pure typed engine in `utils/engine.ts`, hand-verified via esbuild-bundled node sanity script; executive zinc-950 aesthetic replaced the V2 "hacker terminal" look
-- V3 CPA-grade corrections (user granted license to enhance beyond spec):
-  - § 453(i) anti-double-taxation: recapture increases basis → GP% = (FMV − 250k − accumDepr)/FMV
-  - § 170 shield modeled as a tracked carryforward balance consumed by installment interest, hard 5-year expiry (Year 6+ cliff), unused balance reported as wasted
-  - State + local rates applied to recapture, capital gains, and ordinary interest
-  - Depreciable basis = note principal (land excluded via CLT donation)
-  - Installment principal collections (incl. balloon) carry embedded gain tax each year
-  - Limited-equity co-op: investor operating cash flow = $0 by construction; return = depreciation shield + capital back at par (IRR/MOIC computed)
+- Engine/UI separation (since V3): pure typed engine in `utils/engine.ts`, hand-verified via esbuild-bundled node sanity script before any UI work; executive zinc-950 aesthetic
+- V4 (current) is a deliberate SIMPLIFICATION reboot: the user's V4 spec walked back V3's CPA-grade enhancements (state/local taxes, § 453(i) basis adjustment, § 170 carryforward schedule, IRR/insights) in favor of exact flat-rate algebra ("Do NOT hallucinate tax law — use the exact algebraic logic provided"). V4 positions, all verbatim:
+  - Recapture flat 25%; LTCG flat 15%; no state/local
+  - Adjusted Basis = original cost basis − accumulated depreciation; MAY GO NEGATIVE → GP% = MAX(0,(FMV−AdjBasis)/FMV) exceeds 100% (surfaced as `isBasisNegative` annotation, math NOT capped)
+  - Balloon year (1–10) decoupled from note term (5–30); balloon ≥ term → note self-amortizes, balloon $0
+  - Y1 OBBBA shield = 100% bonus on 15-yr + 5-yr CapEx buckets + FMV × 75% × 30% seg bonus on building
+  - Phase 2 burden = balloon + full investor capital take-out, 30-yr refi; mgmt fees flat ×1.15 in Phase 2; rent cliff threshold >10%
 
-## Product (V3 — Institutional Underwriting Model)
+## Product (V4 — Limited-Equity Co-op Syndication)
 
-- 14 grouped sliders incl. note term (5–15 yrs), OH state + Yellow Springs local tax overrides, seller/investor brackets, Day-1 vacant land cash (default $0 — undefined in user spec, surfaced as explicit assumption)
-- Seller: Year 0 crucible + multi-year cumulative post-tax schedule with shield-status badges (SHIELDED/PARTIAL/EXHAUSTED/EXPIRED)
-- Investor: net cash in/out schedule, REPS disclaimer, IRR/MOIC
-- Tenant: Phase 1 vs Phase 2 rent cliff (>15% guardrail), dynamic refi year
-- Structuring Insights: dynamic advisory cards (min solvent DP%, § 170 window optimization, rent-cliff levers, tax-harvest framing)
-- Hardcoded statutory tooltips (4 exact strings from spec) + supplemental assumption tooltips
+- Left sidebar, 18 sliders in 4 spec-named groups (Property & Tenant Baseline / Seller's Financial Reality / The Deal Structure / Investor New CapEx Buckets); mobile: accordion toggle
+- Main view: 5-KPI strip + three data cards: Seller (Year 1 crucible, exact CRITICAL alert string when tax > DP), Investor (MACRS bucket table, shield build-up, REPS box), Tenant (current/P1/P2 rent triptych with Rent Delta vs current, revenue build-up per phase, note amortization table with balloon row)
+- Methodology footnote rendered from engine `METHODOLOGY` array
 
 ## User preferences
 
-- Specs arrive as pasted "ROLE:" prompt files in attached_assets — latest is authoritative; user explicitly granted license (V3) to enhance/expand beyond spec for CPA/MBA/lawyer-grade scrutiny
+- Specs arrive as pasted "ROLE:" prompt files in attached_assets — latest is ALWAYS authoritative and each is a full reboot; implement its formulas verbatim (V4 explicitly revoked V3's enhance-beyond-spec license). Questionable math → annotate in UI, never alter
 - Executive dark aesthetic: zinc-950, muted slate/amber/emerald, no neon terminal styling
 
 ## Gotchas
