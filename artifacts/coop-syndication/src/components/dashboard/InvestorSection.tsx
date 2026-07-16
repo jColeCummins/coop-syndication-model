@@ -1,94 +1,160 @@
 import React from 'react';
-import { DealModel, TOOLTIPS } from '@/utils/engine';
-import { formatCurrency } from '@/lib/utils';
+import { DealMetrics, TOOLTIPS } from '@/utils/calculations';
+import { formatCurrency, formatPercent } from '@/lib/utils';
 import { InfoTooltip } from './InfoTooltip';
 import { AlertTriangle } from 'lucide-react';
 
-export function InvestorSection({ model, tooltips }: { model: DealModel; tooltips: typeof TOOLTIPS }) {
-  const { investor } = model;
+const fmtIrr = (x: number | null) => (x == null ? 'n/a' : formatPercent(x * 100));
+
+export function InvestorSection({ model, tooltips }: { model: DealMetrics; tooltips: typeof TOOLTIPS }) {
+  const { investor, inputs } = model;
   return (
     <section className="flex flex-col space-y-4">
       <div className="border-b border-border pb-2 flex justify-between items-end">
-        <h2 className="text-sm font-medium tracking-wide text-foreground">Investor Reality &mdash; Capital & Year 1 Shield</h2>
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Required Capital Injection: <span className="text-foreground">{formatCurrency(investor.requiredCapitalInjection)}</span></span>
+        <h2 className="text-sm font-medium tracking-wide text-foreground">Investor &mdash; Capital, Depreciation &amp; Return Timeline</h2>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Required Capital: <span className="text-foreground">{formatCurrency(investor.capitalRequired)}</span>
+        </span>
+      </div>
+
+      {/* Return metrics strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Metric
+          title={`IRR ${inputs.investorHasREPS ? '(REPS)' : '(REPS, ref.)'}`}
+          value={fmtIrr(investor.irrWithReps)}
+          active={inputs.investorHasREPS}
+        />
+        <Metric
+          title={`IRR ${!inputs.investorHasREPS ? '(Passive)' : '(Passive, ref.)'}`}
+          value={fmtIrr(investor.irrWithoutReps)}
+          active={!inputs.investorHasREPS}
+        />
+        <Metric title="Equity Multiple" value={investor.equityMultiple.toFixed(2) + 'x'} active />
+        <Metric title="Payback Year" value={investor.paybackYear == null ? 'n/a' : `Year ${investor.paybackYear}`} active />
       </div>
 
       <div className="bg-card border border-border rounded-md overflow-hidden flex flex-col">
+        {/* Depreciation build-up */}
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[11px] tabular-nums whitespace-nowrap">
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
-                <th className="py-3 px-4 font-medium text-left">Bucket</th>
-                <th className="py-3 px-4 font-medium">MACRS Class</th>
+                <th className="py-3 px-4 font-medium text-left">Year 1 Depreciation Build-Up <InfoTooltip text={tooltips.bonus168k} /></th>
+                <th className="py-3 px-4 font-medium">Class</th>
                 <th className="py-3 px-4 font-medium">Amount</th>
-                <th className="py-3 px-4 font-medium">Year 1 Bonus Treatment</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-4 text-left">Roof/Structural</td>
-                <td className="py-3 px-4">27.5-yr</td>
-                <td className="py-3 px-4">{formatCurrency(model.inputs.capexRoofStruct)}</td>
-                <td className="py-3 px-4 text-muted-foreground">27.5-yr schedule, no bonus</td>
+                <td className="py-2.5 px-4 text-left">Cost-Seg 30% of Acquired Improvements <InfoTooltip text={tooltips.costSegBase} /></td>
+                <td className="py-2.5 px-4">5/15-yr, 100% bonus</td>
+                <td className="py-2.5 px-4 text-emerald-500">{formatCurrency(investor.year1Bonus.costSeg)}</td>
               </tr>
               <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-4 text-left">Parking/Land</td>
-                <td className="py-3 px-4">15-yr</td>
-                <td className="py-3 px-4">{formatCurrency(model.inputs.capexParkingLand)}</td>
-                <td className="py-3 px-4 text-emerald-500">100% bonus</td>
+                <td className="py-2.5 px-4 text-left">Parking/Land Improvements CapEx</td>
+                <td className="py-2.5 px-4">15-yr, 100% bonus</td>
+                <td className="py-2.5 px-4 text-emerald-500">{formatCurrency(investor.year1Bonus.parkingLand)}</td>
               </tr>
               <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-4 text-left">Appliances</td>
-                <td className="py-3 px-4">5-yr</td>
-                <td className="py-3 px-4">{formatCurrency(model.inputs.capexAppliances)}</td>
-                <td className="py-3 px-4 text-emerald-500">100% bonus</td>
+                <td className="py-2.5 px-4 text-left">Appliances CapEx</td>
+                <td className="py-2.5 px-4">5-yr, 100% bonus</td>
+                <td className="py-2.5 px-4 text-emerald-500">{formatCurrency(investor.year1Bonus.appliances)}</td>
               </tr>
-              <tr className="bg-muted/10 font-medium">
-                <td className="py-3 px-4 text-left">Total New CapEx</td>
-                <td className="py-3 px-4"></td>
-                <td className="py-3 px-4 text-foreground">{formatCurrency(investor.totalNewCapex)}</td>
-                <td className="py-3 px-4"></td>
+              <tr className="hover:bg-muted/30 transition-colors">
+                <td className="py-2.5 px-4 text-left">Shell + Roof/Structural CapEx (annual, all years)</td>
+                <td className="py-2.5 px-4">27.5-yr SL, no bonus</td>
+                <td className="py-2.5 px-4">{formatCurrency(investor.annualSL)}</td>
+              </tr>
+              <tr className="bg-muted/10 font-bold">
+                <td className="py-2.5 px-4 text-left text-foreground">Year 1 Total Deduction</td>
+                <td className="py-2.5 px-4"></td>
+                <td className="py-2.5 px-4 text-emerald-500 text-sm">{formatCurrency(investor.year1Bonus.total + investor.annualSL)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <div className="overflow-x-auto border-t border-border">
+        {/* Annual flow table */}
+        <div className="px-4 py-2 border-t border-border bg-muted/20 flex items-center justify-between">
+          <span className="text-[11px] font-medium text-foreground">
+            Cash Flow &amp; Tax Timeline &mdash; {inputs.investorHasREPS ? 'REPS Active (losses offset W-2 annually)' : 'Passive (losses suspend until takeout)'}
+            <InfoTooltip text={tooltips.reps469c7} />
+          </span>
+          <span className="text-[10px] text-muted-foreground">Exit at Year {investor.exit.year} takeout <InfoTooltip text={tooltips.exitTax} /></span>
+        </div>
+        <div className="overflow-x-auto">
           <table className="w-full text-right text-[11px] tabular-nums whitespace-nowrap">
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
-                <th className="py-3 px-4 font-medium text-left">Shield Build-Up <InfoTooltip text={tooltips.obbbaShield} /></th>
-                <th className="py-3 px-4 font-medium">Amount</th>
+                <th className="py-2.5 px-4 font-medium text-left">Year</th>
+                <th className="py-2.5 px-4 font-medium">Capital Injected</th>
+                <th className="py-2.5 px-4 font-medium">Operating Cash Flow</th>
+                <th className="py-2.5 px-4 font-medium">Depreciation</th>
+                <th className="py-2.5 px-4 font-medium">Fed Tax Cash</th>
+                <th className="py-2.5 px-4 font-medium">OH / Local</th>
+                <th className="py-2.5 px-4 font-medium">Exit Proceeds</th>
+                <th className="py-2.5 px-4 font-medium">Net Flow</th>
+                <th className="py-2.5 px-4 font-medium">Net Capital Position</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-4 text-left">Parking/Land 100% bonus</td>
-                <td className="py-3 px-4 text-emerald-500">{formatCurrency(investor.bonusOnParkingLand)}</td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-4 text-left">Appliances 100% bonus</td>
-                <td className="py-3 px-4 text-emerald-500">{formatCurrency(investor.bonusOnAppliances)}</td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-3 px-4 text-left">30% Segregated Bonus on Building (75% of FMV)</td>
-                <td className="py-3 px-4 text-emerald-500">{formatCurrency(investor.segBonusOnBuilding)}</td>
-              </tr>
-              <tr className="bg-muted/10 font-bold">
-                <td className="py-3 px-4 text-left text-foreground">Year 1 OBBBA Bonus Shield Total</td>
-                <td className="py-3 px-4 text-emerald-500 text-sm">{formatCurrency(investor.year1BonusShield)}</td>
-              </tr>
+              {investor.schedule.map((row) => (
+                <tr key={row.year} className={`hover:bg-muted/30 transition-colors ${row.isExitYear ? 'bg-accent/10' : ''}`}>
+                  <td className="py-2.5 px-4 text-left">
+                    {row.year}
+                    {row.isExitYear && <span className="ml-2 px-1.5 py-0.5 rounded-sm bg-accent/20 text-accent text-[8px] uppercase tracking-widest font-bold">Takeout</span>}
+                  </td>
+                  <td className="py-2.5 px-4">{row.capitalInjected > 0 ? formatCurrency(-row.capitalInjected) : '—'}</td>
+                  <td className="py-2.5 px-4">{formatCurrency(row.operatingCashFlow)}</td>
+                  <td className="py-2.5 px-4 text-muted-foreground">{formatCurrency(row.depreciation)}</td>
+                  <td className={`py-2.5 px-4 ${row.federalTaxCash > 0 ? 'text-emerald-500' : ''}`}>{formatCurrency(row.federalTaxCash)}</td>
+                  <td className="py-2.5 px-4">{formatCurrency(row.stateTaxCash - row.localTax)}</td>
+                  <td className="py-2.5 px-4">{row.exitProceeds !== 0 ? formatCurrency(row.exitProceeds) : '—'}</td>
+                  <td className="py-2.5 px-4 font-medium">{formatCurrency(row.netCashFlow)}</td>
+                  <td className={`py-2.5 px-4 font-medium ${row.cumulativePosition >= 0 ? 'text-emerald-500' : 'text-foreground'}`}>{formatCurrency(row.cumulativePosition)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        <div className="p-3 bg-accent/10 border-t border-border flex items-start space-x-2">
-          <AlertTriangle className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-          <p className="text-[11px] text-accent font-medium leading-relaxed">
-            Passive investors cannot use this shield against W-2 income without IRC § 469(c)(7) REPS status. <InfoTooltip text={tooltips.reps469c7} />
+        {/* Exit economics */}
+        <div className="px-4 py-3 border-t border-border bg-muted/10 grid grid-cols-2 md:grid-cols-5 gap-3 text-[11px] tabular-nums">
+          <ExitStat label="Takeout Price" value={formatCurrency(investor.exit.salePrice)} />
+          <ExitStat label="Basis at Exit" value={formatCurrency(investor.exit.adjustedBasisAtExit)} />
+          <ExitStat label="Gain on Exit" value={formatCurrency(investor.exit.gain)} />
+          <ExitStat label="Exit Tax" value={formatCurrency(investor.exit.exitTax)} negative />
+          <ExitStat label="Net to Investors" value={formatCurrency(investor.exit.netToInvestors)} />
+        </div>
+
+        {/* Optimal-fit guidance */}
+        <div className="p-4 bg-accent/5 border-t border-border space-y-1.5">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center">
+            <AlertTriangle className="w-3 h-3 mr-1.5 text-accent" /> When This Investment Is Optimal
           </p>
+          {investor.optimalWhen.map((line, i) => (
+            <p key={i} className="text-[11px] text-muted-foreground leading-relaxed">&bull; {line}</p>
+          ))}
         </div>
       </div>
     </section>
+  );
+}
+
+function Metric({ title, value, active }: { title: string; value: string; active?: boolean }) {
+  return (
+    <div className={`border p-4 rounded-md flex flex-col justify-center space-y-1 ${active ? 'bg-card border-border' : 'bg-card/40 border-border/50'}`}>
+      <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">{title}</span>
+      <span className={`text-2xl font-light tabular-nums tracking-tight ${active ? 'text-foreground' : 'text-muted-foreground'}`}>{value}</span>
+    </div>
+  );
+}
+
+function ExitStat({ label, value, negative }: { label: string; value: string; negative?: boolean }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[9px] uppercase tracking-widest text-muted-foreground">{label}</span>
+      <span className={`font-medium ${negative ? 'text-destructive' : 'text-foreground'}`}>{value}</span>
+    </div>
   );
 }

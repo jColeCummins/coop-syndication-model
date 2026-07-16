@@ -1,6 +1,6 @@
 # Co-op Syndication Deal Configuration Engine
 
-A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limited-Equity Co-op Syndication (25-unit, $2M FMV): CLT land donation (§ 170) + seller-financed installment note (§ 453), with investor bonus depreciation and a tenant rent-cliff analysis.
+A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limited-Equity Co-op conversion (25-unit, $1.5M FMV): CLT land donation (§ 170) + seller-financed installment note (§ 453), with investor bonus depreciation/IRR analysis and a tenant cost-recovery rent model. See docs/ANALYSIS.md for the full deal analysis and the V5 correction log.
 
 ## Run & Operate
 
@@ -18,31 +18,36 @@ A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limi
 ## Where things live
 
 - App: `artifacts/coop-syndication/src/`
-  - `utils/engine.ts` — THE calculation engine (computeDealModel): all tax/finance math, insights, tooltip strings, defaults. Components must contain zero math.
-  - `utils/finance.ts` — low-level PMT / remaining-balance amortization helpers
+  - `utils/calculations.ts` — THE calculation engine (calculateDealMetrics): all tax/finance math, tooltip strings, methodology copy, defaults. Components must contain zero math.
+  - `utils/finance.ts` — low-level PMT / remaining-balance / NPV / IRR helpers
   - `components/` — presentational only
+- `docs/ANALYSIS.md` — CPA-grade deal analysis + V5 correction log (why each V4/primer rule changed)
 - API server exists (`artifacts/api-server`) but is unused by this app
+- Build/serve require env vars: `PORT` and `BASE_PATH` (e.g. `PORT=5199 BASE_PATH=/ pnpm run build`)
 
 ## Architecture decisions
 
 - Frontend-only: all financial math runs client-side for instant slider reactivity; no API calls
-- Engine/UI separation (since V3): pure typed engine in `utils/engine.ts`, hand-verified via esbuild-bundled node sanity script before any UI work; executive zinc-950 aesthetic
-- V4 (current) is a deliberate SIMPLIFICATION reboot: the user's V4 spec walked back V3's CPA-grade enhancements (state/local taxes, § 453(i) basis adjustment, § 170 carryforward schedule, IRR/insights) in favor of exact flat-rate algebra ("Do NOT hallucinate tax law — use the exact algebraic logic provided"). V4 positions, all verbatim:
-  - Recapture flat 25%; LTCG flat 15%; no state/local
-  - Adjusted Basis = original cost basis − accumulated depreciation; MAY GO NEGATIVE → GP% = MAX(0,(FMV−AdjBasis)/FMV) exceeds 100% (surfaced as `isBasisNegative` annotation, math NOT capped)
-  - Balloon year (1–10) decoupled from note term (5–30); balloon ≥ term → note self-amortizes, balloon $0
-  - Y1 OBBBA shield = 100% bonus on 15-yr + 5-yr CapEx buckets + FMV × 75% × 30% seg bonus on building
-  - Phase 2 burden = balloon + full investor capital take-out, 30-yr refi; mgmt fees flat ×1.15 in Phase 2; rent cliff threshold >10%
+- Engine/UI separation (since V3): pure typed engine in `utils/calculations.ts`, hand-verified via esbuild-bundled node sanity script before any UI work; executive zinc-950 aesthetic
+- V5 (current) is a CPA-CORRECTNESS reboot, explicitly authorized by the user ("You are a higher authority — if something doesn't make sense, tell me what you're changing and why, and change it"), superseding V4's implement-verbatim rule. V5 positions (full rationale in docs/ANALYSIS.md):
+  - NO § 453(i) recapture bomb for straight-line residential realty: unrecaptured § 1250 gain (25%) spreads over installments, recognized FIRST within each year's gain (Reg. § 1.453-12)
+  - GPR = gross profit ÷ CONTRACT PRICE (FMV − donation), basis apportioned pro-rata gift/sale (§ 1011(b)); accumulated depreciation clamped at 75%-of-basis building share → GPR ∈ [0,1], negative basis impossible
+  - § 170: FMV deduction, 30%-of-AGI/yr, 6 usable years (Y7 = first zero-shield year), utilization tracked + under-90% alert; Ohio allows no charitable deduction; Ohio municipalities can't tax interest/gains (ORC 718) — local rate only hits positive investor rental profits
+  - Auto per-year NIIT (3.8% over $250k MAGI) and 15/20% LTCG bracket split (~$550k threshold)
+  - Investor: cost-seg bonus base = contract price × 30% (not FMV × 75%); Ohio 5/6 bonus addback modeled; EXIT TAX at takeout (basis eroded by depreciation, 25%/15%); IRR computed net of tax, both REPS and passive; suspended § 469 losses release at exit
+  - Rent = cost-recovery FLOOR incl. R&M, owner-paid utilities, replacement reserves, investor pref (the missing lines that made V4 rents ~$490 vs realistic ~$711)
+  - Seller comparison card: straight cash vs cash+donation vs installment+donation (nominal + NPV @ slider discount rate)
+  - Kept from V4/primer: balloon (1–10) decoupled from term (5–30); exact CRITICAL alert string; >10% rent-cliff threshold; three MACRS CapEx buckets; Phase 2 = balloon + investor take-out on 30-yr refi, mgmt ×1.15
 
-## Product (V4 — Limited-Equity Co-op Syndication)
+## Product (V5 — Limited-Equity Co-op Conversion)
 
-- Left sidebar, 18 sliders in 4 spec-named groups (Property & Tenant Baseline / Seller's Financial Reality / The Deal Structure / Investor New CapEx Buckets); mobile: accordion toggle
-- Main view: 5-KPI strip + three data cards: Seller (Year 1 crucible, exact CRITICAL alert string when tax > DP), Investor (MACRS bucket table, shield build-up, REPS box), Tenant (current/P1/P2 rent triptych with Rent Delta vs current, revenue build-up per phase, note amortization table with balloon row)
+- Left sidebar: 27 sliders + REPS switch in 4 groups (Property & Operations / Seller Profile / Deal Structure / Investor Profile & New CapEx); mobile: accordion toggle; state via useReducer
+- Main view: 6-KPI strip + three data cards: Seller (deal geometry, annual cash & tax schedule with balloon/no-shield badges, § 170 utilization alert, 3-scenario cash-sale comparison), Investor (Y1 depreciation build-up, annual flow table w/ takeout row, exit economics, IRR/EM/payback metrics, optimal-when bullets), Tenant (rent triptych, full revenue build-up incl. new OpEx lines, note amortization)
 - Methodology footnote rendered from engine `METHODOLOGY` array
 
 ## User preferences
 
-- Specs arrive as pasted "ROLE:" prompt files in attached_assets — latest is ALWAYS authoritative and each is a full reboot; implement its formulas verbatim (V4 explicitly revoked V3's enhance-beyond-spec license). Questionable math → annotate in UI, never alter
+- Specs arrive as pasted "ROLE:" prompt files (attached_assets) or uploaded primers — but as of V5 the user granted standing authority to OVERRIDE spec math that is wrong, provided every change is explicitly called out and justified (docs/ANALYSIS.md is the ledger)
 - Executive dark aesthetic: zinc-950, muted slate/amber/emerald, no neon terminal styling
 
 ## Gotchas

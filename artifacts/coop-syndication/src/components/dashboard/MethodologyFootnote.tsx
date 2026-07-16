@@ -1,5 +1,5 @@
 import React from 'react';
-import { METHODOLOGY } from '@/utils/engine';
+import { METHODOLOGY } from '@/utils/calculations';
 
 export function MethodologyFootnote() {
   return (
