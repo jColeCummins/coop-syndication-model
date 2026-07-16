@@ -9,7 +9,7 @@ import { MethodologyFootnote } from '@/components/dashboard/MethodologyFootnote'
 import { Building2 } from 'lucide-react';
 
 export type InputAction =
-  | { type: 'set'; key: keyof DealInputs; value: number | boolean }
+  | { type: 'set'; key: keyof DealInputs; value: DealInputs[keyof DealInputs] }
   | { type: 'reset' };
 
 function inputsReducer(state: DealInputs, action: InputAction): DealInputs {
@@ -42,7 +42,7 @@ export default function App() {
                   Limited-Equity Co-op Conversion
                 </h1>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider hidden sm:block">
-                  CLT Land Donation (&sect; 170) + Seller Installment Note (&sect; 453) | Underwriting Model V5
+                  CLT Land Donation (&sect; 170) + Seller Installment Note (&sect; 453) | Underwriting Model V5.2
                 </p>
               </div>
             </div>

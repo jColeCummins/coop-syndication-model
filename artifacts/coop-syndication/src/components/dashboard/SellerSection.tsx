@@ -1,12 +1,13 @@
-import React from 'react';
-import { DealMetrics, TOOLTIPS } from '@/utils/calculations';
+import React, { useMemo } from 'react';
+import { DealMetrics, TOOLTIPS, findMaxAbsorbableDonation } from '@/utils/calculations';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import { InfoTooltip } from './InfoTooltip';
-import { AlertTriangle, ShieldOff } from 'lucide-react';
+import { AlertTriangle, ShieldOff, Target } from 'lucide-react';
 
 export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltips: typeof TOOLTIPS }) {
   const { seller } = model;
-  const underUtilized = seller.charitable.total > 0 && seller.charitable.utilizationPct < 90;
+  const hasExpiry = seller.charitable.expired >= 1;
+  const maxDonation = useMemo(() => findMaxAbsorbableDonation(model.inputs), [model.inputs]);
 
   return (
     <section className="flex flex-col space-y-4">
@@ -23,17 +24,29 @@ export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltip
         </div>
       )}
 
-      {underUtilized && (
+      {hasExpiry && (
         <div className="bg-accent/10 border border-accent/30 p-3 rounded-md flex items-start space-x-2">
           <ShieldOff className="w-4 h-4 text-accent shrink-0 mt-0.5" />
           <p className="text-[11px] text-accent font-medium leading-relaxed">
-            &sect; 170 UTILIZATION: only {formatPercent(seller.charitable.utilizationPct)} of the {formatCurrency(seller.charitable.total)} donation
-            deduction is absorbed before the 5-year carryforward expires &mdash; {formatCurrency(seller.charitable.unused)} of deduction is lost.
-            The 30%-of-AGI ceiling is the binding constraint; a larger balloon year inside the 6-year window, or donating across tax years, raises utilization.
+            &sect; 170 EXPIRY: {formatCurrency(seller.charitable.expired)} of the {formatCurrency(seller.charitable.total)} donation
+            deduction expires unused after Year {seller.charitable.firstZeroShieldYear - 1} &mdash; the 30%-of-AGI ceiling can&apos;t absorb it in time.
+            Reduce the gift toward the fully-absorbed maximum below, or move the buyout year inside the window.
             <InfoTooltip text={tooltips.charitable170} />
           </p>
         </div>
       )}
+
+      <div className="bg-card/60 border border-border p-3 rounded-md flex items-start space-x-2">
+        <Target className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Largest land gift fully deducted before the &sect; 170 window closes at current settings:{' '}
+          <span className="text-emerald-500 font-semibold">{formatCurrency(maxDonation)}</span>{' '}
+          ({formatPercent((maxDonation / Math.max(1, model.inputs.totalFMV)) * 100)} of value; search capped at 40%).
+          Current gift {formatCurrency(seller.charitable.total)} &rarr; {formatPercent(seller.charitable.utilizationPct)} deducted,{' '}
+          {formatCurrency(seller.charitable.floorLost)} lost to the 0.5%-of-AGI floor{seller.charitable.expired >= 1 ? `, ${formatCurrency(seller.charitable.expired)} expires` : ', nothing expires'}.
+          <InfoTooltip text={tooltips.maxDonation} />
+        </p>
+      </div>
 
       {seller.depWasClamped && (
         <div className="bg-muted/40 border border-border p-3 rounded-md">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { DealMetrics, TOOLTIPS } from '@/utils/calculations';
+import { DealMetrics, TOOLTIPS, DEAL_CONSTANTS } from '@/utils/calculations';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import { InfoTooltip } from './InfoTooltip';
 import { AlertTriangle } from 'lucide-react';
@@ -46,7 +46,7 @@ export function InvestorSection({ model, tooltips }: { model: DealMetrics; toolt
             </thead>
             <tbody className="divide-y divide-border">
               <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Cost-Seg 30% of Acquired Improvements <InfoTooltip text={tooltips.costSegBase} /></td>
+                <td className="py-2.5 px-4 text-left">Cost-Seg {Math.round(DEAL_CONSTANTS.COST_SEG_SHORT_LIFE_PCT * 100)}% of Acquired Improvements <InfoTooltip text={tooltips.costSegBase} /></td>
                 <td className="py-2.5 px-4">5/15-yr, 100% bonus</td>
                 <td className="py-2.5 px-4 text-emerald-500">{formatCurrency(investor.year1Bonus.costSeg)}</td>
               </tr>
@@ -77,7 +77,8 @@ export function InvestorSection({ model, tooltips }: { model: DealMetrics; toolt
         {/* Annual flow table */}
         <div className="px-4 py-2 border-t border-border bg-muted/20 flex items-center justify-between">
           <span className="text-[11px] font-medium text-foreground">
-            Cash Flow &amp; Tax Timeline &mdash; {inputs.investorHasREPS ? 'REPS Active (losses offset W-2 annually)' : 'Passive (losses suspend until takeout)'}
+            Cash Flow &amp; Tax Timeline &mdash; {inputs.investorHasREPS ? 'REPS Active (losses offset W-2 annually, § 199A on profit years)' : 'Passive (losses suspend until takeout)'}
+            {!inputs.prefCurrentPay && ' — pref accrues to exit'}
             <InfoTooltip text={tooltips.reps469c7} />
           </span>
           <span className="text-[10px] text-muted-foreground">Exit at Year {investor.exit.year} takeout <InfoTooltip text={tooltips.exitTax} /></span>
@@ -120,11 +121,16 @@ export function InvestorSection({ model, tooltips }: { model: DealMetrics; toolt
 
         {/* Exit economics */}
         <div className="px-4 py-3 border-t border-border bg-muted/10 grid grid-cols-2 md:grid-cols-5 gap-3 text-[11px] tabular-nums">
-          <ExitStat label="Takeout Price" value={formatCurrency(investor.exit.salePrice)} />
+          <ExitStat label="Takeout Price (Formula)" value={formatCurrency(investor.exit.salePrice)} />
           <ExitStat label="Basis at Exit" value={formatCurrency(investor.exit.adjustedBasisAtExit)} />
           <ExitStat label="Gain on Exit" value={formatCurrency(investor.exit.gain)} />
           <ExitStat label="Exit Tax" value={formatCurrency(investor.exit.exitTax)} negative />
           <ExitStat label="Net to Investors" value={formatCurrency(investor.exit.netToInvestors)} />
+        </div>
+        <div className="px-4 pb-3 bg-muted/10 text-[10px] text-muted-foreground tabular-nums">
+          Exit gain split <InfoTooltip text={tooltips.exitAllocation} />: {formatCurrency(investor.exit.exitOrdinary)} ordinary ({formatPercent(inputs.exitShortLifeAllocationPct)} short-life allocation)
+          &middot; {formatCurrency(investor.exit.exit25)} @ 25% &middot; {formatCurrency(investor.exit.exit15)} @ 15% &middot; plus state on the full gain
+          {investor.accruedPrefAtExit > 0 && <> &middot; accrued pref {formatCurrency(investor.accruedPrefAtExit)} paid at exit (ordinary income)</>}
         </div>
 
         {/* Optimal-fit guidance */}
