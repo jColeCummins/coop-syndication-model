@@ -1,0 +1,43 @@
+# ROLE: Senior React Architect & Principal Tax Analyst
+
+You are upgrading the existing React SPA into an institutional-grade, data-dense financial underwriting dashboard for a bifurcated Real Estate Co-op conversion. The aesthetic must be modernized from a "hacker terminal" to an elegant, executive-grade wealth management dashboard using deep, rich grays, expansive padding, and crisp typography.
+
+## UI/UX & FUNCTIONAL UPGRADES (STRICT)
+1. **The Typography & Aesthetic:** Use Tailwind's `bg-zinc-950` as the baseline. Replace harsh neon accents with muted, professional tones (e.g., slate, amber for warnings, emerald for positive metrics). All data text must be razor-sharp.
+2. **Interactive Explanatory Tooltips:** Implement accessible tooltips for all complex legal codes using `@radix-ui/react-tooltip` or a clean local state wrapper. The text for these tooltips is mapped in the documentation section below.
+3. **Dynamic Schedules:** Replace static metrics with explicit, multi-year, side-by-side data tables for both the Seller and the Investors.
+
+## NEW INPUT VARIABLES (Add to State)
+- `noteTermYears`: Slider for the duration of the seller note (5 to 15 years, default 5). This dynamically alters the length of the financial tables.
+- `stateTaxRate`: Slider for Ohio state income tax override (0% to 5%, step 0.1%, default 3.5%).
+- `localTaxRate`: Slider for local municipal income tax override (0% - 3%, step 0.1%, default 1.5% for Yellow Springs).
+
+## CALCULATIONS ENGINE UPGRADES
+
+### 1. The Seller Cumulative Cash Flow Schedule
+Generate an annualized data table showing the following columns: **Year, Gross Cash Received, Cumulative Post-Tax Cash In Pocket, Remaining Principal Balance**.
+- **Year 0 (Day 1):** Gross Cash Received = `vacantLandCash` + `Down Payment Received`. Post-Tax Cash = Gross Cash minus the fully updated Year 1 IRS § 453(i) recapture tax and capital gains tax on the down payment.
+- **Years 1 to `noteTermYears`:** For each year, calculate the annual P&I received. 
+- **The Expiration Cliff Rule:** For Years 1 through 5, the ordinary income tax on the interest portion is shielded by the `cltLandDonation` value. For **Year 6 and beyond**, the `Charitable Shield` drops to ZERO, and the interest income is fully taxed at the seller's ordinary income rate plus the `stateTaxRate` and `localTaxRate` overrides. This must visibly demonstrate the financial penalty of extending the note past the 5-year carryforward window.
+- **Final Year:** Add the `Balloon Payment` to the Gross Cash Received column.
+
+### 2. The Investor Net Cash In/Out Table
+Generate an annualized 5-year table detailing the cash flow velocity for the Phase 1 syndicate.
+- **Columns:** Year, Capital Injected, Operating Cash Flow, Depreciation Tax Savings, Net Year-End Capital Position.
+- **Year 0:** Capital Injected = `Down Payment Received` + Year 1 CapEx.
+- **Year 1:** Depreciation Tax Savings = `Depreciation Basis` * 0.30 * (Investor's Ordinary Bracket + `stateTaxRate` + `localTaxRate`).
+- **Year 5 (The Out):** Capital Injected = Negative value showing the return of original principal via the Co-op's Phase 2 refinance.
+
+### 3. The Tenant Rent Cliff Projection
+Show a side-by-side comparison card displaying Phase 1 Rent vs Phase 2 Rent (Year 6+), taking into account that the Phase 2 rent must cleanly support the commercial debt service required to pay off the remaining seller balloon and return the investors' capital.
+
+---
+
+## CONTEXTUAL TOOLTIP PORTFOLIO (Hardcode these exact strings)
+
+- **§ 453(i) Recapture Bomb:** "IRS Code dictates that all historical depreciation claimed on a property must be recaptured and taxed as ordinary income up front in Year 1 of an installment sale, completely decoupled from the actual cash received at closing."
+- **§ 170 AGI Limitation:** "Charitable deductions for land donations to public charities are capped at 50% of the donor's Adjusted Gross Income (AGI) per year. Unused deduction balances can be carried forward for a maximum of 5 consecutive tax years, creating a severe tax cliff in Year 6."
+- **§ 469(c)(7) REPS Requirement:** "To use passive real estate depreciation losses to offset active W-2 or ordinary income, an investor must log 750+ hours annually in real property trades or businesses and materially participate in operations."
+- **§ 168(k) MACRS Cost Segregation:** "An engineering-based study that unpacks a monolithic real estate asset into 5-year personal property and 15-year land improvements, legally unlocking immediate 100% bonus depreciation expensing upon acquisition."
+
+Deliver the comprehensive single-file React component utilizing these exact mathematical and design overhauls.
