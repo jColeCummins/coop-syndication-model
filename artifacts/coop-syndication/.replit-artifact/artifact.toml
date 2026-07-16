@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Co-op Syndication Financial Model"
+version = "1.0.0"
+id = "artifacts/coop-syndication"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21808
+
+[services.development]
+run = "pnpm --filter @workspace/coop-syndication run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/coop-syndication", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/coop-syndication/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21808"
+BASE_PATH = "/"

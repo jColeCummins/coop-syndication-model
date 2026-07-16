@@ -1,0 +1,60 @@
+# ROLE: Lead React Architect & Commercial Real Estate CPA / Tax Strategist
+
+You have two objectives. 
+First, act as a critical CPA to peer review the tax assumptions of a bifurcated Real Estate Limited-Equity Co-op Syndication. 
+Second, build a highly complex, data-dense React Single Page Application (SPA) that models both Phase 1 (Years 1-5 Seller Financing) and Phase 2 (Year 6+ Commercial Refinance), including depreciation tables and Time Value of Money (TVM) comparisons.
+
+## PART 1: THE PEER REVIEW (Read & Implement)
+We are structuring the purchase of a 25-unit apartment complex ($2M FMV). 
+- **The Seller (Paul):** Low-income retiree. We are offering a bifurcated buyout: A $500k charitable land donation to a Community Land Trust (CLT) to generate an IRC Section 170 deduction, and a $1.5M seller-financed installment note (IRC Section 453) over 5 years. 
+- **The Investors:** Provide the down payment and CapEx. We are utilizing the OBBBA 100% bonus depreciation (Section 168(k)) on 5/7/15-year MACRS property to generate Year 1 passive losses. We assume Real Estate Professional Status (REPS) to offset active income.
+- **The Co-op (Tenants):** Must survive the monthly assessments.
+**YOUR TASK:** In the UI of the application you build, include an "AI Audit Log" component at the bottom of the page. In this component, output your professional critique of these tax assumptions. Flag any recapture risks for the investors in Year 5, and confirm if the Section 170 carryforward successfully offsets the Section 453 interest income for a low-bracket seller.
+
+## PART 2: THE REACT APPLICATION (Strict Engineering)
+Build a React SPA using Tailwind CSS. Use a dark-mode, dense financial dashboard layout. Do not hallucinate formulas; stick strictly to the logic below.
+
+### 1. GLOBAL STATE (Inputs/Sliders)
+**Acquisition & Phase 1 (Years 1-5):**
+- `totalFMV` ($1M - $3M, default $2M)
+- `cltLandDonation` ($0 - $1M, default $500k)
+- `sellerDownPaymentPercent` (0% - 30%, default 10%)
+- `sellerInterestRate` (3% - 10%, default 6%)
+- `amortizationYears` (10 - 30, default 20)
+- `balloonYear` (Fixed: 5)
+- `tvmRate` (Seller's alternative market yield: 3% - 10%, default 7%)
+
+**Phase 2 Refinance (Year 6+):**
+- `phase2InterestRate` (Commercial mortgage rate: 4% - 10%, default 6.5%)
+- `phase2Amortization` (15 - 40 years, default 30)
+
+**Operations:**
+- `units` (Fixed: 25)
+- `capexPerUnit` ($0 - $300, default $100/mo)
+- `mgmtFeePerDoor` (Starting fee: $0 - $100, default $50/mo)
+- `mgmtInflationRate` (Annual increase: 0% - 10%, default 3%)
+- `propertyTaxes` (Fixed: $28,472)
+- `baseInsuranceMisc` (Fixed: $15,000)
+
+### 2. CORE LOGIC & CALCULATIONS
+
+**A. Seller's TVM Apple-to-Apples Comparison:**
+- **Cash Sale Net:** (`totalFMV` - 15% CapGains on ($totalFMV - $250k basis)). Compound this net amount annually at `tvmRate` for 5 years to find `Future Value of Cash Sale`.
+- **Seller-Financed Net:** Calculate the upfront Down Payment (minus Year 1 installment taxes). Compound it for 5 years at `tvmRate`. Calculate each year's net P&I cash flow (minus taxes shielded by the 170 donation) and compound each remaining year to Year 5. Add the Year 5 Balloon.
+- **Output:** Clearly display the true compounded Delta between the two scenarios at Year 5.
+
+**B. Investor Depreciation (MACRS) Table:**
+- Assume 20% of `totalFMV` is 5-year property, 10% is 15-year land improvements.
+- Generate a 5-year table showing the depreciation schedule. If OBBBA is toggled ON, apply 100% bonus depreciation to these buckets in Year 1. 
+
+**C. The Tenant "Before & After" Rent Cliff (CRITICAL):**
+- **Phase 1 Rent (Years 1-5):** Calculate required rent based on Phase 1 debt service (P&I on seller note) + fixed OpEx + CapEx reserves. 
+- **Phase 2 Refinance Burden:** In Year 5, the Co-op must secure a loan for `Seller Balloon Payment` + `Investor Original Capital Returned`. 
+- **Phase 2 Rent (Year 6):** Calculate the new debt service using `phase2InterestRate` and `phase2Amortization` on the Refinance Burden. Add the inflated Year 6 OpEx (Property Taxes + `baseInsuranceMisc` + (`mgmtFeePerDoor` compounded at `mgmtInflationRate` for 5 years)). 
+- **Output:** Display "Phase 1 Monthly Rent" vs "Phase 2 Monthly Rent". If Phase 2 Rent jumps by more than 15%, highlight it in RED.
+
+### 3. UI/UX REQUIREMENTS
+- Create 4 distinct visual blocks: **Seller TVM**, **Investor MACRS**, **Tenant Rent Cliff**, and the **AI Audit Log**.
+- Ensure all sliders recalculate the entire tree instantly without performance lag.
+- Write robust, vanilla JS utility functions for PMT, compounding interest, and installment tax logic. 
+- Use standard React hooks (`useState`, `useMemo`).

@@ -1,0 +1,54 @@
+# ROLE: Lead React Systems Engineer & Commercial Real Estate CPA
+You are building a React-based Deal Configuration Engine for a bifurcated Real Estate Limited-Equity Co-op Syndication. 
+
+## CONTEXT & AUDIT RESOLUTION
+Previous models contained fatal tax flaws which you must account for in your logic:
+1. **IRC § 453(i) Recapture:** All prior depreciation taken by the seller MUST be recaptured as ordinary income in Year 1 of an installment sale, regardless of cash received. The Year 1 Down Payment must dynamically scale to cover this.
+2. **IRC § 170 AGI Limits:** A $500k land donation cannot fully shield Year 1 interest income for a low-income retiree due to the 30%/50% AGI cap. The model must reflect a partial tax shield.
+3. **IRC § 469(c)(7) REPS:** Investors cannot use Year 1 bonus depreciation against active W-2 income unless they qualify as Real Estate Professionals. This must be explicitly labeled.
+
+## ENGINEERING CONSTRAINTS
+- **Tech Stack:** React, Tailwind CSS, Lucide Icons.
+- **Layout:** Dark-mode financial dashboard. Use CSS Grid. Three main columns/cards: Seller Reality (Paul), Investor Reality (The Syndicate), Tenant Reality (The Co-op).
+- **Calculations:** Do NOT hallucinate PMT functions or tax formulas. Use standard amortization math.
+
+## GLOBAL STATE (Sliders & Inputs)
+Implement accessible sliders for the following (include the default value on load):
+- `totalFMV`: Total FMV ($1.5M - $3M, step $50k, default $2M)
+- `cltLandDonation`: Land donated to CLT ($0 - $1M, step $50k, default $500k)
+- `accumulatedDepreciation`: Seller's past depreciation taken ($0 - $1M, step $10k, default $300k)
+- `sellerDownPaymentPct`: Note Down Payment (0% - 30%, step 1%, default 15%)
+- `sellerInterestRate`: Seller Note Rate (3% - 10%, step 0.25%, default 6%)
+- `phase2InterestRate`: Year 6 Commercial Refi Rate (4% - 10%, step 0.25%, default 7%)
+- `capexPerUnit`: Monthly CapEx per door ($0 - $300, step $10, default $100)
+- `mgmtFee`: Monthly Mgmt fee per door ($0 - $100, step $5, default $50)
+
+**Constants:** `units` = 25. `propertyTaxes` = 28472. `insuranceMisc` = 15000. `amortYears` = 20. `balloonYear` = 5.
+
+## CORE LOGIC REQUIREMENTS
+
+### 1. The Seller's Crucible (Year 1 Tax vs. Liquidity)
+- `Note Principal` = `totalFMV` - `cltLandDonation`
+- `Down Payment Received` = `Note Principal` * (`sellerDownPaymentPct` / 100)
+- `Gross Profit %` = (`totalFMV` - 250000) / `totalFMV`
+- **Year 1 Tax Liability Calculation:**
+  - *Recapture Bomb:* `accumulatedDepreciation` * 0.25 (Unrecaptured Sec 1250 flat rate)
+  - *Capital Gains on Cash:* (`Down Payment Received` * `Gross Profit %`) * 0.15
+  - *Total Year 1 Tax* = Recapture Bomb + Capital Gains on Cash.
+- **UI Requirement:** Display "Year 1 Net Liquidity" (`Down Payment Received` - `Total Year 1 Tax`). If this number is NEGATIVE, the Seller Card must flash a red warning: "CRITICAL: Down payment does not cover Year 1 Recapture Liability."
+
+### 2. The REPS Investor Profile
+- `Required Capital Injection` = `Down Payment Received` + (`capexPerUnit` * 25 * 12 * 5 years).
+- `Year 1 Depreciation Shield` = (`totalFMV` * 0.75) * 0.30 (Assuming 30% of basis qualifies for 100% bonus depreciation under OBBBA).
+- **UI Requirement:** Display the Capital Required vs. Depreciation Shield. Add a permanent disclaimer box: "Assumes Section 469(c)(7) REPS. Passive investors cannot offset active W-2 income."
+
+### 3. The Tenant Rent Cliff (Phase 1 vs Phase 2)
+- **Phase 1 Annual Revenue Req:** `calculatePMT(sellerInterestRate, amortYears, (Note Principal - Down Payment))` + `propertyTaxes` + `insuranceMisc` + (`mgmtFee` * 25 * 12) + (`capexPerUnit` * 25 * 12).
+- `Phase 1 Monthly Rent` = (`Phase 1 Annual Revenue Req` / 25 / 12) * 1.04.
+- **Phase 2 Refinance Burden:** Calculate the exact balloon balance of the Seller Note at month 60. ADD the `Required Capital Injection` (buying out the Phase 1 investors' original capital).
+- **Phase 2 Annual Revenue Req:** `calculatePMT(phase2InterestRate, 30, Phase 2 Refinance Burden)` + `propertyTaxes` + `insuranceMisc` + ((`mgmtFee` * 1.15) * 25 * 12). *(Assumes 15% cumulative inflation on mgmt).*
+- `Phase 2 Monthly Rent` = (`Phase 2 Annual Revenue Req` / 25 / 12) * 1.04.
+- **UI Requirement:** Display Phase 1 Rent and Phase 2 Rent side-by-side. If Phase 2 Rent > Phase 1 Rent by more than 15%, highlight the Phase 2 Rent in RED.
+
+## OUTPUT
+Generate the complete, single-file React component. Ensure sliders are performant and calculations update instantly.
