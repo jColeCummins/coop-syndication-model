@@ -77,10 +77,18 @@ export interface DealInputs {
   stateTaxRate: number;            // % flat state income tax (nonbusiness)
   localTaxRate: number;            // % municipal (net profits only)
   ohioBIDConfirmed: boolean;       // Ohio Business Income Deduction, CPA-confirmed
-  // Grants & Subsidy — $0 = not awarded. Modeled as soft (forgiven,
-  // non-amortizing) funding committed AT CLOSING that replaces investor
-  // capital dollar-for-dollar. Compliance periods are covenants (tooltips),
-  // not cash flows. Ordered by descending probability of award.
+  // Grants & Subsidy — $0 = not awarded. Soft (forgiven, non-amortizing)
+  // funding. Two timing modes:
+  //   grantsAtClosing=true  → committed before closing; replaces investor
+  //                           capital dollar-for-dollar (lowers BOTH phases).
+  //   grantsAtClosing=false → pursued during the hold and applied at the
+  //                           buyout, shrinking the Phase-2 refinance only —
+  //                           the "investors move first, grants chisel the
+  //                           Year-5 rent" strategy. DEFAULT: don't close on
+  //                           hope; underwrite Phase 1 on investor capital.
+  // Compliance periods are covenants (tooltips), not cash flows. Ordered by
+  // descending probability of award.
+  grantsAtClosing: boolean;
   grantEnergyRebates: number;      // utility/HWAP rebates — near-certain, small
   grantCountyHome: number;         // HOME/CHDO via the CLT — high, incumbent partner
   grantOhioTrust: number;          // Ohio Housing Trust Fund — moderate
@@ -138,6 +146,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   stateTaxRate: 2.75,
   localTaxRate: 1.5,
   ohioBIDConfirmed: true,
+  grantsAtClosing: false,
   grantEnergyRebates: 0,
   grantCountyHome: 0,
   grantOhioTrust: 0,
@@ -323,7 +332,8 @@ export interface TenantMetrics {
   balloonBalance: number;
   balloonBeyondTerm: boolean;
   accruedPrefAtExit: number;
-  phase2RefinanceBurden: number;   // balloon + capital + accrued pref (PIK)
+  grantsAtBuyout: number;          // hold-period grants applied against the refinance
+  phase2RefinanceBurden: number;   // balloon + capital + accrued pref − buyout grants
   phase2AnnualDebtService: number;
   phase2AnnualRevenueReq: number;
   phase2MonthlyRent: number;
@@ -377,7 +387,7 @@ export const TOOLTIPS = {
   noteMechanics:
     'Payments are sized as if the loan ran the full schedule, but the remaining balance is paid off at the buyout year via the co-op\'s bank refinance. If the buyout year reaches the schedule length, the loan simply pays itself off.',
   refinanceBurden:
-    'What the co-op\'s bank loan must cover at buyout: the seller\'s remaining balance, the investors\' capital, and any accrued (unpaid) preferred return. The co-op\'s ability to qualify for this mortgage is the deal\'s most important risk.',
+    'What the co-op\'s bank loan must cover at buyout: the seller\'s remaining balance, the investors\' capital, and any accrued (unpaid) preferred return — minus any grants awarded during the hold and applied here. The co-op\'s ability to qualify for this mortgage is the deal\'s most important risk.',
   vacancyGrossUp:
     'Required rents are grossed up for empty units and unpaid rent: ÷ (1 − vacancy), so occupied units carry the full requirement.',
   requiredRent:
@@ -395,7 +405,7 @@ export const TOOLTIPS = {
   basisFork:
     'What the seller "paid" per the IRS. $475k assumes the 1993 transfer was a purchase or inheritance (stepped-up). If it was a GIFT, the original 1968 cost carries over — roughly $250k. The real figure is on the seller\'s Form 4562 / Schedule E: get the return, stop estimating. Either way the lifetime tax barely moves (~$3k) because the building is fully depreciated.',
   grants:
-    'Grants are modeled as soft funding committed at closing: each dollar replaces an investor dollar, cutting the preferred return out of rents AND shrinking the Phase-2 refinance (grants are never repaid). $0 = not awarded. Award timing and compliance durations are covenants handled in the closing calendar, not cash-flow inputs — a grant that is not committed at closing cannot be underwritten. CPA must confirm characterization (deferred-loan treatment keeps depreciable basis intact; taxable-grant treatment would shrink the Year-1 shield).',
+    'Grants are soft funding (never repaid), $0 = not awarded. Timing toggle: committed AT CLOSING, each dollar replaces an investor dollar (lowers both phases); pursued DURING THE HOLD (default), awards are applied at the buyout and shrink the Phase-2 refinance only — the "investors move first, grants chisel the Year-5 rent" strategy. Don\'t underwrite closing on hoped-for awards. CPA must confirm characterization (deferred-loan treatment keeps depreciable basis intact; taxable-grant treatment would shrink the Year-1 shield).',
   grantEnergyRebates:
     'Utility efficiency rebates (AES Ohio measure-based programs) and Ohio Home Weatherization Assistance for income-qualified units. Near-certain if the renovation includes qualifying measures — but small: budget $200–$1,500/unit. No affordability covenant. Stackable with everything below.',
   grantCountyHome:
@@ -654,15 +664,18 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const opexBuyoutYear = opexAt(inputs, inputs.balloonYear + 1);
 
   const totalNewCapex = inputs.capexRoofStruct + inputs.capexParkingLand + inputs.capexAppliances;
-  // Grants replace investor capital dollar-for-dollar, clamped at the total
-  // capital need. Soft-funding treatment: never repaid, no debt service, and
-  // depreciable basis kept intact (deferred-loan characterization — the CPA
-  // must confirm §61/§118 treatment; a taxable-grant characterization would
-  // shrink the Year-1 shield instead).
+  // Grants are soft funding (never repaid, basis intact — CPA to confirm
+  // §61/§118). Timing decides where they land:
+  //   at closing → replace investor capital 1:1 (lowers both phases);
+  //   during the hold (default) → applied at the buyout, shrinking the
+  //   Phase-2 refinance only. Each clamped at what it offsets.
   const grantsRequested =
     inputs.grantEnergyRebates + inputs.grantCountyHome + inputs.grantOhioTrust + inputs.grantFhlbAhp;
-  const grantsApplied = Math.min(grantsRequested, downPayment + totalNewCapex);
-  const capitalRequired = downPayment + totalNewCapex - grantsApplied;
+  const capitalNeed = downPayment + totalNewCapex;
+  const grantsAtClosingApplied = inputs.grantsAtClosing
+    ? Math.min(grantsRequested, capitalNeed)
+    : 0;
+  const capitalRequired = capitalNeed - grantsAtClosingApplied;
   const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
   const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
   const accruedPrefAtExit = inputs.prefCurrentPay ? 0 : prefAnnual * lastNoteYear;
@@ -672,7 +685,11 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const occupancy = 1 - inputs.vacancyRate / 100;
   const phase1MonthlyRent = phase1AnnualRevenueReq / inputs.units / 12 / occupancy;
 
-  const phase2RefinanceBurden = balloonBalance + capitalRequired + accruedPrefAtExit;
+  const burdenBeforeGrants = balloonBalance + capitalRequired + accruedPrefAtExit;
+  const grantsAtBuyoutApplied = inputs.grantsAtClosing
+    ? 0
+    : Math.min(grantsRequested, burdenBeforeGrants);
+  const phase2RefinanceBurden = burdenBeforeGrants - grantsAtBuyoutApplied;
   const refiRate = inputs.phase2CommercialRate / 100;
   const monthlyP2 =
     phase2RefinanceBurden > 0 ? pmt(refiRate, D.REFI_AMORT_YEARS * 12, phase2RefinanceBurden) : 0;
@@ -694,6 +711,7 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     balloonBalance,
     balloonBeyondTerm,
     accruedPrefAtExit,
+    grantsAtBuyout: grantsAtBuyoutApplied,
     phase2RefinanceBurden,
     phase2AnnualDebtService,
     phase2AnnualRevenueReq,
@@ -706,7 +724,7 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const investor = buildInvestorMetrics(inputs, {
     contractPrice,
     capitalRequired,
-    grantsApplied,
+    grantsApplied: grantsAtClosingApplied,
     totalNewCapex,
     prefAnnual,
     accruedPrefAtExit,

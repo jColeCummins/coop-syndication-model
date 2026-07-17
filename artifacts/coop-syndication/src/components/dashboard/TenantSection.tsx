@@ -134,7 +134,8 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
             <span className="text-muted-foreground italic">Note self-amortizes before the buyout year &mdash; no balloon due.</span>
           ) : (
             <span className="text-muted-foreground flex items-center">
-              Phase 2 Refinance = Balloon + Investor Capital{tenant.accruedPrefAtExit > 0 ? ' + Accrued Pref' : ''} <InfoTooltip text={tooltips.refinanceBurden} />
+              Phase 2 Refinance = Balloon + Investor Capital{tenant.accruedPrefAtExit > 0 ? ' + Accrued Pref' : ''}
+              {tenant.grantsAtBuyout > 0 ? <span className="text-emerald-500 ml-1">&minus; {formatCurrency(tenant.grantsAtBuyout)} grants</span> : ''} <InfoTooltip text={tooltips.refinanceBurden} />
             </span>
           )}
           <span className="font-semibold tabular-nums mt-1 md:mt-0 text-foreground">{formatCurrency(tenant.phase2RefinanceBurden)}</span>
