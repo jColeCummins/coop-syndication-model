@@ -189,3 +189,20 @@ Four buckets, ordered by descending probability of award, each defaulting to $0 
 - Columbus vacancy (9.7%) and 45–50% OER benchmarks: **dismissed** — wrong market; Yellow Springs vacancy is tight (4% modeled), and this property's honest OER is *above* their benchmark (~62–68%) because of village water rates, which the escalators already carry.
 - Trademark risk: **dismissed** — the reviewer mistook the project for software marketed under the "Twin Coach" name; it is an internal model *of* the actual Twin Coach Apartments.
 - decimal.js / floating point: **dismissed for this tool** — float64 error is orders of magnitude below display rounding on a 30-year schedule; decimal arithmetic becomes relevant only if the engine ever generates filing-grade documents (Form 8283 values come from the appraisal, not this dashboard).
+
+## A.7 The tenant-first launch plan (V5.3.1)
+
+The strategy the deal is actually being run on — investors close first (no grants underwritten at closing; the federal subsidy arrives *through* them as bonus depreciation, QBI, and the at-risk-shaped loss schedule), tenants are protected from day one, and the Year-5 rent step is chiseled during the hold — is now directly modelable via the **grant-timing toggle** (default: awards applied at the buyout, shrinking the Phase-2 refinance; flip it only when awards are committed pre-closing).
+
+Engine-verified ladder at the launch configuration (PIK pref + 25-yr note sizing + 5.5% seller rate + water-conservation CapEx; no closing grants):
+
+| Step | Phase 1 rent | Phase 2 rent |
+|---|---|---|
+| Launch (nothing else goes right) | **$634** | $866 |
+| HOME $150k + rebates $15k won by Year 5 | $634 | $820 |
+| + OHTF $150k ($315k total at buyout) | $634 | $778 |
+| + Phase-2 self-management | $634 | **$718** |
+
+Tenants pay **$66 below current rents for five years**; the fully-chiseled Phase-2 rent is +13% over launch across six years (~2%/yr — below general inflation) against $900–1,100 market comps. Investors: $318k in, 6.3% REPS IRR (4.8% passive), ~$111k of federal tax savings in Year 1, formula takeout in Year 5 — mission-priced but compensated, and every grant dollar won during the hold de-risks *their* takeout too (a smaller Phase-2 mortgage is easier to qualify). Seller: unchanged — headroom $97k, donation fully absorbed, still ahead of a bifurcated cash sale. The downside case is not collapse but a bounded rent step to $866 if every grant application fails.
+
+**Management-incentive guardrail** (raised during strategy review, now in the model's tooltip and the diligence list): contract management on a **flat per-door fee** — never a percentage of rents or costs, which literally pays the manager more for mowing more — and carve large recurring services (landscaping, turns) into competitively-bid or tenant-performed work. The model's management line has always been flat per-door; the deal documents must match it.
