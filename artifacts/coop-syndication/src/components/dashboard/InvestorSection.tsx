@@ -38,6 +38,23 @@ export function InvestorSection({ model, tooltips }: { model: DealMetrics; toolt
         <Metric title="Payback Year" value={investor.paybackYear == null ? 'n/a' : `Year ${investor.paybackYear}`} active />
       </div>
 
+      {/* Plain-English ROI story — reads the "quiet years" as intended */}
+      <div className="bg-card border border-border rounded-md overflow-hidden">
+        <div className="px-4 py-2 border-b border-border bg-muted/20 flex items-center justify-between">
+          <span className="text-[11px] font-medium text-foreground">The Investor Deal in Plain Terms <InfoTooltip text={tooltips.roiStory} /></span>
+          <span className="text-[10px] text-muted-foreground">{inputs.investorHasREPS ? 'REPS' : 'passive'} · pref {inputs.prefCurrentPay ? 'current-pay' : 'accrues to exit'}</span>
+        </div>
+        <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-[11px] tabular-nums">
+          <RoiStat label="Capital In" value={formatCurrency(investor.capitalRequired)} sub="at closing" />
+          <RoiStat label="Year-1 Tax Refund" value={formatCurrency(investor.year1TaxRefund)} sub="shelters other income" emerald />
+          <RoiStat label="Effective Capital at Risk" value={formatCurrency(investor.effectiveCapitalAtRisk)} sub="after the refund" />
+          <RoiStat label="Back at Exit + Total" value={formatCurrency(investor.totalReturned)} sub={`net ${formatCurrency(investor.netProfit)} · ${formatPercent(investor.simpleRoi * 100)} total`} emerald={investor.netProfit >= 0} />
+        </div>
+        <div className="px-4 pb-3 text-[11px] text-muted-foreground leading-relaxed">
+          Reads like a tax-advantaged 5-year note: ~{formatPercent((investor.capitalRequired > 0 ? investor.year1TaxRefund / investor.capitalRequired : 0) * 100)} of capital returns in Year 1 as a tax refund, the middle years are intentionally quiet{!inputs.prefCurrentPay ? ' (the preferred return is accruing, not paid)' : ''}, and capital{investor.accruedPrefAtExit > 0 ? ' plus accrued preferred' : ''} comes back at the Year-{investor.exit.year} takeout. The {formatPercent((investor.irrWithReps ?? 0) * 100)} REPS IRR captures all of it — the quiet years are not idle, the work was front-loaded into Year 1.
+        </div>
+      </div>
+
       <div className="bg-card border border-border rounded-md overflow-hidden flex flex-col">
         {/* Depreciation build-up */}
         <div className="overflow-x-auto">
@@ -166,6 +183,16 @@ function ExitStat({ label, value, negative }: { label: string; value: string; ne
     <div className="flex flex-col">
       <span className="text-[9px] uppercase tracking-widest text-muted-foreground">{label}</span>
       <span className={`font-medium ${negative ? 'text-destructive' : 'text-foreground'}`}>{value}</span>
+    </div>
+  );
+}
+
+function RoiStat({ label, value, sub, emerald }: { label: string; value: string; sub?: string; emerald?: boolean }) {
+  return (
+    <div className="flex flex-col space-y-0.5">
+      <span className="text-[9px] uppercase tracking-widest text-muted-foreground">{label}</span>
+      <span className={`text-lg font-light tabular-nums ${emerald ? 'text-emerald-500' : 'text-foreground'}`}>{value}</span>
+      {sub && <span className="text-[9px] text-muted-foreground">{sub}</span>}
     </div>
   );
 }

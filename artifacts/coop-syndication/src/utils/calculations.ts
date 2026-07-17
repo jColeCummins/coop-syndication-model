@@ -310,6 +310,12 @@ export interface InvestorMetrics {
   irrWithoutReps: number | null;
   equityMultiple: number;
   paybackYear: number | null;
+  // Plain-English ROI view (active REPS toggle):
+  year1TaxRefund: number;          // Year-1 federal + state tax cash back
+  effectiveCapitalAtRisk: number;  // capital − Year-1 refund
+  totalReturned: number;           // sum of positive annual cash flows
+  netProfit: number;               // totalReturned − capital
+  simpleRoi: number;               // netProfit ÷ capital (whole-hold, undiscounted)
   optimalWhen: string[];
 }
 
@@ -380,6 +386,8 @@ export const TOOLTIPS = {
     '100% first-year write-off on appliances, site work, and the cost-segregated share of the purchased buildings (2025 law, permanent, includes used property). The building shell depreciates over 27.5 years. Ohio adds back 5/6 of the bonus and returns it over five years. For your CPA: § 168(k) as amended by OBBBA; ORC 5747.01 addback.',
   costSegBase:
     'An engineering study can reclassify part of the purchased buildings for immediate write-off. 20–30% is the honest range for garden apartments; 25% survives review without argument. The base is the purchase price — the buyers acquire improvements only (land goes to the CLT).',
+  roiStory:
+    'How to read the investor return: put in capital, get a large share back within ~12 months as a Year-1 tax refund (the 100% bonus depreciation shelters the investor\'s other income — the LLC is a pass-through, so this lands on the members\' own returns). The middle years are intentionally quiet — bonus depreciation front-loads ~75% of the write-off into Year 1, and the small remaining depreciation is offset by the phantom income of note principal paydown. Capital (plus any accrued preferred) returns at the takeout. The depreciation is a real federal subsidy only a taxable investor can capture — a grant, CDFI, or the CLT cannot — which is what lets investors accept a below-market preferred return and keeps tenant rent low.',
   niit:
     'An extra 3.8% federal tax on investment income above $250k (married) / $200k (single). Spreading the sale keeps most years under the line — a lump-sum sale maximizes it. Applied automatically per year.',
   ltcgBracket:
@@ -1022,6 +1030,13 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
 
   const positives = active.flows.slice(1).reduce((a, b) => a + Math.max(0, b), 0);
   const equityMultiple = ctx.capitalRequired > 0 ? positives / ctx.capitalRequired : 0;
+  const year1TaxRefund = Math.max(
+    0,
+    active.rows[0].federalTaxCash + active.rows[0].stateTaxCash,
+  );
+  const effectiveCapitalAtRisk = ctx.capitalRequired - year1TaxRefund;
+  const netProfit = positives - ctx.capitalRequired;
+  const simpleRoi = ctx.capitalRequired > 0 ? netProfit / ctx.capitalRequired : 0;
   let paybackYear: number | null = null;
   {
     let cum = -ctx.capitalRequired;
@@ -1064,6 +1079,11 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
     irrWithReps,
     irrWithoutReps,
     equityMultiple,
+    year1TaxRefund,
+    effectiveCapitalAtRisk,
+    totalReturned: positives,
+    netProfit,
+    simpleRoi,
     paybackYear,
     optimalWhen,
   };

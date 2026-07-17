@@ -42,7 +42,7 @@ export default function App() {
                   Limited-Equity Co-op Conversion
                 </h1>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider hidden sm:block">
-                  CLT Land Donation (&sect; 170) + Seller Installment Note (&sect; 453) | Underwriting Model V5.2
+                  CLT Land Donation (&sect; 170) + Seller Installment Note (&sect; 453) | Underwriting Model V5.3
                 </p>
               </div>
             </div>
