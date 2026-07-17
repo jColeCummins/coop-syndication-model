@@ -79,6 +79,13 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
           />
         </Group>
 
+        <Group title="Grants & Subsidy — $0 = not awarded">
+          <SliderRow label="Utility & weatherization rebates" tip="AES Ohio measure-based rebates + Ohio HWAP for income-qualified units. Near-certain if the renovation includes qualifying measures, but small ($200–$1,500/unit). No affordability covenant." value={inputs.grantEnergyRebates} formatter={formatCurrency} min={0} max={40000} step={1000} onChange={(v) => update('grantEnergyRebates', v)} />
+          <SliderRow label="County HOME / CHDO funds" tip="Federal HOME dollars via Greene County, ideally through the CLT as a certified CHDO (15% of HOME funds are reserved for CHDOs — the incumbent-partner advantage). Requires HOME rent/income limits (compatible with this model's rents), a 20-year covenant for rehab >$40k/unit, environmental review, and Davis-Bacon wages at 12+ assisted units. Usually a 0% deferred forgivable loan." value={inputs.grantCountyHome} formatter={formatCurrency} min={0} max={300000} step={10000} onChange={(v) => update('grantCountyHome', v)} />
+          <SliderRow label="Ohio Housing Trust Fund" tip="Competitive annual rounds (Ohio Dept. of Development) for nonprofit-sponsored affordable housing; priority for ≤50% AMI service, ~15-year commitment, grants or 0% deferred loans. A displacement-preventing LEC conversion scores well; moderate probability." value={inputs.grantOhioTrust} formatter={formatCurrency} min={0} max={250000} step={10000} onChange={(v) => update('grantOhioTrust', v)} />
+          <SliderRow label="FHLB Cincinnati AHP" tip="Competitive grant applied through a member bank (pairs with the Phase-2 refinance lender). Needs ≥20% of units at ≤50% AMI and a 15-year recorded retention agreement; roughly a third of applications fund — the least certain bucket." value={inputs.grantFhlbAhp} formatter={formatCurrency} min={0} max={500000} step={10000} onChange={(v) => update('grantFhlbAhp', v)} />
+        </Group>
+
         <Group title="Investors & Renovation" last>
           <SliderRow label="Investor preferred return" tip="The fixed yearly return investors earn on their money. They get this plus their money back at buyout — and no share of appreciation (the ground lease locks that in for the community)." value={inputs.investorPrefReturn} formatter={formatPercent} min={0} max={12} step={0.5} onChange={(v) => update('investorPrefReturn', v)} />
           <SwitchRow

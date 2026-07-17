@@ -29,7 +29,8 @@ A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limi
 
 - Frontend-only: all financial math runs client-side for instant slider reactivity; no API calls
 - Engine/UI separation (since V3): pure typed engine in `utils/calculations.ts`, hand-verified via esbuild-bundled node sanity script before any UI work; executive zinc-950 aesthetic
-- V5.2 (current) implements the accepted subset of the July 2026 external review (docs/REVIEW-2026-07.md + docs/defaults-v5.1.patch.ts + docs/UX-CONFIG-SPEC-v5.2.md; triage in docs/ANALYSIS.md V5.2 addendum):
+- V5.3 (current) adds Grants & Subsidy: 4 buckets ordered by award probability (rebates / county HOME-CHDO / OHTF / FHLB AHP), $0 = not awarded, committed-at-closing assumption, soft-forgiven-funding treatment replacing investor capital 1:1 (basis intact, CPA to confirm §61/§118), clamped at total capital need — plus § 465 AT-RISK enforcement (seller note ≠ qualified nonrecourse financing per § 465(b)(6); losses capped at cash-at-risk, excess releases against exit gain). Verdicts on earlier-era research (conservation-easement pivot REJECTED, PAD roof election ADOPTED as note, solar ITC deadline corrected, CAT/decimal.js/Columbus-benchmarks dismissed) in docs/ANALYSIS.md A.6.
+- V5.2 implemented the accepted subset of the July 2026 external review (docs/REVIEW-2026-07.md + docs/defaults-v5.1.patch.ts + docs/UX-CONFIG-SPEC-v5.2.md; triage in docs/ANALYSIS.md V5.2 addendum):
   - Asset-level basis split (land basis → CLT gift, building adj basis → sale; GPR ≈ 100%); OBBBA 0.5%-AGI charitable floor (never carries); § 1245 exit recapture via exitShortLifeAllocationPct input (default 50%); Ohio BID toggle (default on, CPA-confirm); § 199A QBI on REPS profit years; filing-status NIIT/LTCG thresholds (2026)
   - Per-line opex escalators (util/ins 8%, tax/mgmt 3%, other 2.5%) compounding from Y1; Phase-2 rent + cliff alert computed on buyout-year opex; mgmt ×1.15 bump replaced by 3%/yr; PIK-pref toggle (accrues to buyout, added to refinance burden)
   - Defaults re-underwritten: FMV $1.25M as-is ($700 rents, ~7% cap, deferred maintenance); YS opex (taxes 30k, ins 22.5k, R&M 1200/u, util 1150/u, res 400/u); basis $475k/dep $356,250 (stepped-up story — Form 4562 is the truth); cost-seg 25%; donation $430k = just inside the $436k (34.9% of FMV) max fully absorbed in the § 170 window (findMaxAbsorbableDonation, search capped at 40%)
@@ -45,9 +46,9 @@ A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limi
   - Seller comparison card: straight cash vs cash+donation vs installment+donation (nominal + NPV @ slider discount rate)
   - Kept from V4/primer: balloon (1–10) decoupled from term (5–30); exact CRITICAL alert string; >10% rent-cliff threshold; three MACRS CapEx buckets; Phase 2 = balloon + investor take-out on 30-yr refi, mgmt ×1.15
 
-## Product (V5.2 — Limited-Equity Co-op Conversion)
+## Product (V5.3 — Limited-Equity Co-op Conversion)
 
-- Left sidebar: plain-language labels + tooltips on every input (UX-CONFIG-SPEC §2), 24 sliders + 4 switches (MFJ, Ohio BID, pref current-pay, REPS) in 4 groups; mobile: accordion toggle; state via useReducer
+- Left sidebar: plain-language labels + tooltips on every input (UX-CONFIG-SPEC §2), 28 sliders + 4 switches (MFJ, Ohio BID, pref current-pay, REPS) in 5 groups incl. Grants & Subsidy (4 buckets by award probability, $0 = not awarded, soft-funding treatment, § 465 at-risk enforced); mobile: accordion toggle; state via useReducer
 - Main view: 6-KPI strip + three data cards: Seller (§ 170 max-absorbable-donation readout + expiry alert, deal geometry, annual cash & tax schedule with balloon/no-shield badges, 3-scenario cash-sale comparison), Investor (Y1 depreciation build-up, flow table w/ takeout row, exit economics + gain split by rate, IRR/EM/payback, optimal-when bullets), Tenant (rent triptych w/ annualized-drift framing, escalated Phase-1/Phase-2 revenue build-up with per-line escalator badges, note amortization)
 - Methodology footnote rendered from engine `METHODOLOGY` array
 
@@ -58,6 +59,6 @@ A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limi
 
 ## Gotchas
 
-- All math lives in `utils/engine.ts` — never put formulas in components; verify engine changes with an esbuild-bundle + node script before UI work
+- All math lives in `utils/calculations.ts` — never put formulas in components; verify engine changes with an esbuild-bundle + node script before UI work
 - Dark mode is permanent; no light/dark toggle
 - esbuild binary is not exposed via pnpm bins; locate it under `node_modules/.pnpm/esbuild@*/node_modules/esbuild/bin/esbuild`

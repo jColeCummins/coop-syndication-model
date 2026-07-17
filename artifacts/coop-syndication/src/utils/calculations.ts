@@ -77,6 +77,14 @@ export interface DealInputs {
   stateTaxRate: number;            // % flat state income tax (nonbusiness)
   localTaxRate: number;            // % municipal (net profits only)
   ohioBIDConfirmed: boolean;       // Ohio Business Income Deduction, CPA-confirmed
+  // Grants & Subsidy — $0 = not awarded. Modeled as soft (forgiven,
+  // non-amortizing) funding committed AT CLOSING that replaces investor
+  // capital dollar-for-dollar. Compliance periods are covenants (tooltips),
+  // not cash flows. Ordered by descending probability of award.
+  grantEnergyRebates: number;      // utility/HWAP rebates — near-certain, small
+  grantCountyHome: number;         // HOME/CHDO via the CLT — high, incumbent partner
+  grantOhioTrust: number;          // Ohio Housing Trust Fund — moderate
+  grantFhlbAhp: number;            // FHLB Cincinnati AHP — competitive
   // Investor Profile & New CapEx
   investorPrefReturn: number;      // %
   prefCurrentPay: boolean;         // true = paid from rents; false = accrues (PIK)
@@ -130,6 +138,10 @@ export const DEFAULT_INPUTS: DealInputs = {
   stateTaxRate: 2.75,
   localTaxRate: 1.5,
   ohioBIDConfirmed: true,
+  grantEnergyRebates: 0,
+  grantCountyHome: 0,
+  grantOhioTrust: 0,
+  grantFhlbAhp: 0,
   investorPrefReturn: 7,
   prefCurrentPay: true,
   investorMarginalRate: 35,
@@ -265,6 +277,7 @@ export interface InvestorYearRow {
 
 export interface InvestorMetrics {
   capitalRequired: number;
+  grantsApplied: number;
   purchaseBasis: number;
   year1Bonus: { costSeg: number; parkingLand: number; appliances: number; total: number };
   annualSL: number;
@@ -381,6 +394,16 @@ export const TOOLTIPS = {
     'The largest land gift the seller can fully deduct within the six-year window at the current settings, holding everything else fixed. Larger gifts strand deduction (it expires); the appraisal, not this number, determines what the gift is actually worth.',
   basisFork:
     'What the seller "paid" per the IRS. $475k assumes the 1993 transfer was a purchase or inheritance (stepped-up). If it was a GIFT, the original 1968 cost carries over — roughly $250k. The real figure is on the seller\'s Form 4562 / Schedule E: get the return, stop estimating. Either way the lifetime tax barely moves (~$3k) because the building is fully depreciated.',
+  grants:
+    'Grants are modeled as soft funding committed at closing: each dollar replaces an investor dollar, cutting the preferred return out of rents AND shrinking the Phase-2 refinance (grants are never repaid). $0 = not awarded. Award timing and compliance durations are covenants handled in the closing calendar, not cash-flow inputs — a grant that is not committed at closing cannot be underwritten. CPA must confirm characterization (deferred-loan treatment keeps depreciable basis intact; taxable-grant treatment would shrink the Year-1 shield).',
+  grantEnergyRebates:
+    'Utility efficiency rebates (AES Ohio measure-based programs) and Ohio Home Weatherization Assistance for income-qualified units. Near-certain if the renovation includes qualifying measures — but small: budget $200–$1,500/unit. No affordability covenant. Stackable with everything below.',
+  grantCountyHome:
+    'Federal HOME funds via Greene County / the Ohio Development allocation, ideally through the CLT as a certified CHDO (15% of HOME allocations are reserved for CHDOs — the incumbent-partner advantage). Eligibility: units affordable at HOME rent limits (roughly ≤65–80% AMI — at/above this model\'s required rents, so compatible), 20-year affordability covenant for rehab over $40k/unit, federal environmental review, and Davis-Bacon wages if 12+ units are HOME-assisted. Typically structured as a 0% deferred forgivable loan.',
+  grantOhioTrust:
+    'Ohio Housing Trust Fund (Ohio Dept. of Development): competitive annual rounds for nonprofit-sponsored affordable housing; priority scoring for projects serving ≤50% AMI households, ~15-year affordability commitment, grants or 0% deferred loans. A CLT/LEC conversion with tenant displacement prevention scores well; moderate probability.',
+  grantFhlbAhp:
+    'Federal Home Loan Bank of Cincinnati Affordable Housing Program: competitive grants applied for through a member bank (pairs naturally with the Phase-2 refinance lender). Eligibility: ≥20% of units at ≤50% AMI, 15-year retention agreement recorded against the property, nonprofit sponsorship scores well. Awards can reach ~$1M but roughly a third of applications fund — the least certain bucket.',
 } as const;
 
 export const METHODOLOGY: string[] = [
@@ -389,6 +412,9 @@ export const METHODOLOGY: string[] = [
   'Investor: depreciable base = contract price + new CapEx; 100% bonus (§ 168(k)/OBBBA) on the 5/15-yr classes including a 25% cost-seg reclass; 27.5-yr straight line on the shell (full-year convention). REPS losses offset W-2 annually with a § 199A 20% deduction on positive years; passive losses suspend and release at the takeout (§ 469(g)). Exit tax: gain up to short-life depreciation × the negotiated exit-allocation % is ordinary income; the next tranche to total depreciation is 25%; the rest 15%; plus flat state on the gain. Ohio during the hold: BID zeroes profit-year state tax; without BID the 5/6 bonus addback applies. IRR/equity multiple/payback are post-tax.',
   'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate annually (water/insurance 8%, taxes/management 3%, others 2.5%); Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, 30-yr amortization). The rent-cliff alert compares Phase 2 to Phase 1 on that basis.',
   'Defaults (July 2026 re-underwrite): FMV $1.25M as-is (in-place $700 rents, deferred maintenance, ~7% Class-C village cap; $1.5M is the stabilized number). Land donation $430k = the largest gift fully absorbed inside the § 170 window at these settings (30% of FMV absorbs with slack; 40% strands deduction). Basis $475k stepped-up story — confirm from the seller\'s Form 4562; a gift transfer means ~$250k carryover instead.',
+  'Grants & subsidy: four buckets ordered by award probability (utility/weatherization rebates, county HOME/CHDO via the CLT, Ohio Housing Trust Fund, FHLB Cincinnati AHP), each $0 unless awarded, assumed committed at closing, and modeled as soft forgiven funding that replaces investor capital dollar-for-dollar — cutting the preferred return out of Phase-1 rents and shrinking the Phase-2 refinance. Compliance periods (HOME 20 yr, AHP 15 yr, OHTF ~15 yr) are recorded covenants, not cash flows; their rent/income limits sit at or above this model\'s cost-recovery rents, so they are compatible. CPA items: §61/§118 characterization (deferred-loan treatment assumed, basis intact) and Davis-Bacon exposure at 12+ HOME-assisted units.',
+  '§ 465 at-risk limitation (enforced): the seller note is not qualified nonrecourse financing (§ 465(b)(6) excludes debt owed to the property\'s seller), so investors — REPS or not — deduct losses only up to cash invested; the excess suspends and releases against the exit gain. At the no-grant defaults the Year-1 loss sits just inside the at-risk cap; grant-funded scenarios push past it, and the model defers the excess rather than printing fictitious first-year savings.',
+  'Adopted from external peer review: a partial-asset-disposition election (Reg. § 1.168(i)-8) on replaced components (e.g., the roof) adds a Year-1 loss deduction for the old component\'s allocated basis — quantified by the cost-seg engineering study, not modeled separately. Ground-lease drafting items: 99-year term (renewable) exceeding any mortgage term, and a solvency safety valve letting a board supermajority override the formula rent if reserves are breached — a rigid rent formula with no escape hatch is an underwriting defect. Rejected from the same reviews (rationale in docs/ANALYSIS.md): the § 170(h) conservation-easement pivot, Ohio CAT modeling (receipts ~$220k vs the $6M exclusion), decimal-arithmetic refactoring, and Columbus-market vacancy/OER benchmarks applied to a Yellow Springs asset.',
   'Simplifications a CPA should re-underwrite: flat marginal rates; full-year MACRS conventions (no placed-in-service timing per bucket); buyout assumed at year-end; investor NIIT ignored (REPS exempts; passive years net to zero); Ohio 1/6 addback recovery truncated at exit; single investor pool, no promote; § 461(l), § 453A pledge rule, month-of-closing AFR, qualified appraisal / Form 8283, and no contractual linkage between donation and sale are diligence items, not model features. Illustrative only — not tax, legal, or investment advice.',
 ];
 
@@ -628,7 +654,15 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const opexBuyoutYear = opexAt(inputs, inputs.balloonYear + 1);
 
   const totalNewCapex = inputs.capexRoofStruct + inputs.capexParkingLand + inputs.capexAppliances;
-  const capitalRequired = downPayment + totalNewCapex;
+  // Grants replace investor capital dollar-for-dollar, clamped at the total
+  // capital need. Soft-funding treatment: never repaid, no debt service, and
+  // depreciable basis kept intact (deferred-loan characterization — the CPA
+  // must confirm §61/§118 treatment; a taxable-grant characterization would
+  // shrink the Year-1 shield instead).
+  const grantsRequested =
+    inputs.grantEnergyRebates + inputs.grantCountyHome + inputs.grantOhioTrust + inputs.grantFhlbAhp;
+  const grantsApplied = Math.min(grantsRequested, downPayment + totalNewCapex);
+  const capitalRequired = downPayment + totalNewCapex - grantsApplied;
   const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
   const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
   const accruedPrefAtExit = inputs.prefCurrentPay ? 0 : prefAnnual * lastNoteYear;
@@ -672,6 +706,7 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const investor = buildInvestorMetrics(inputs, {
     contractPrice,
     capitalRequired,
+    grantsApplied,
     totalNewCapex,
     prefAnnual,
     accruedPrefAtExit,
@@ -798,6 +833,7 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
 interface InvestorCtx {
   contractPrice: number;
   capitalRequired: number;
+  grantsApplied: number;
   totalNewCapex: number;
   prefAnnual: number;
   accruedPrefAtExit: number;
@@ -853,7 +889,14 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
   const buildFlows = (hasReps: boolean) => {
     const rows: InvestorYearRow[] = [];
     const flows: number[] = [-ctx.capitalRequired];
-    let suspended = 0;
+    let suspended = 0;        // § 469 passive-loss carryforward (non-REPS)
+    let suspended465 = 0;     // § 465 at-risk carryforward (REPS mode)
+    // At-risk = cash invested. The seller note is NOT qualified nonrecourse
+    // financing (§ 465(b)(6) excludes debt owed to the property's seller), so
+    // even REPS investors deduct losses only up to cash-at-risk; the excess
+    // suspends until income or the exit gain replenishes at-risk. This binds
+    // whenever grants shrink the equity slice below the Year-1 bonus.
+    let atRisk = ctx.capitalRequired;
     let ohioDeferred = 0;
     let cumulative = -ctx.capitalRequired;
 
@@ -868,21 +911,25 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
       let federalTaxCash = 0;
       let stateTaxCash = 0;
       if (hasReps) {
-        // § 199A: 20% QBI deduction on positive rental income years.
-        federalTaxCash =
-          taxable > 0 ? -taxable * (1 - T.QBI_DEDUCTION) * invRate : -taxable * invRate;
-        if (inputs.ohioBIDConfirmed) {
-          stateTaxCash = 0; // profit years sit inside the $250k BID cap
+        // Ohio 5/6 addback bookkeeping (BID-off path only).
+        let ohioAdj = 0;
+        if (y === 1) {
+          ohioAdj = year1Bonus.total * J.OHIO_BONUS_ADDBACK;
+          ohioDeferred = ohioAdj;
+        } else if (ohioDeferred > 0) {
+          ohioAdj = -ohioDeferred / 5;
+        }
+        if (taxable < 0) {
+          const usableLoss = Math.min(-taxable, Math.max(0, atRisk));
+          suspended465 += -taxable - usableLoss;
+          atRisk -= usableLoss;
+          federalTaxCash = usableLoss * invRate;
+          stateTaxCash = inputs.ohioBIDConfirmed ? 0 : -(-usableLoss + ohioAdj) * stateRate;
         } else {
-          let ohioTaxable = taxable;
-          if (y === 1) {
-            const addback = year1Bonus.total * J.OHIO_BONUS_ADDBACK;
-            ohioTaxable += addback;
-            ohioDeferred = addback;
-          } else if (ohioDeferred > 0) {
-            ohioTaxable -= ohioDeferred / 5;
-          }
-          stateTaxCash = -ohioTaxable * stateRate;
+          atRisk += taxable;
+          // § 199A: 20% QBI deduction on positive rental income years.
+          federalTaxCash = -taxable * (1 - T.QBI_DEDUCTION) * invRate;
+          stateTaxCash = inputs.ohioBIDConfirmed ? 0 : -(taxable + ohioAdj) * stateRate;
         }
       } else {
         if (taxable < 0) {
@@ -908,6 +955,12 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
           exitProceeds += suspended * invRate; // § 469(g) release
           suspended = 0;
         }
+        if (hasReps && suspended465 > 0) {
+          // Exit gain replenishes at-risk, releasing § 465-suspended losses.
+          const release = Math.min(suspended465, exitGain);
+          exitProceeds += release * invRate;
+          suspended465 -= release;
+        }
       }
 
       const netCashFlow = prefReceived + federalTaxCash + stateTaxCash - localTax + exitProceeds;
@@ -922,7 +975,7 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
         federalTaxCash,
         stateTaxCash,
         localTax,
-        suspendedLossBalance: suspended,
+        suspendedLossBalance: hasReps ? suspended465 : suspended,
         exitProceeds,
         netCashFlow,
         cumulativePosition: cumulative,
@@ -963,6 +1016,7 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
 
   return {
     capitalRequired: ctx.capitalRequired,
+    grantsApplied: ctx.grantsApplied,
     purchaseBasis: ctx.contractPrice,
     year1Bonus,
     annualSL,

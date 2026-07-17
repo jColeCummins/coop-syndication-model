@@ -14,6 +14,11 @@ export function InvestorSection({ model, tooltips }: { model: DealMetrics; toolt
         <h2 className="text-sm font-medium tracking-wide text-foreground">Investor &mdash; Capital, Depreciation &amp; Return Timeline</h2>
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Required Capital: <span className="text-foreground">{formatCurrency(investor.capitalRequired)}</span>
+          {investor.grantsApplied > 0 && (
+            <span className="ml-1 normal-case tracking-normal text-emerald-500">
+              (after {formatCurrency(investor.grantsApplied)} grants <InfoTooltip text={tooltips.grants} />)
+            </span>
+          )}
         </span>
       </div>
 
