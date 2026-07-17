@@ -59,6 +59,7 @@ export interface DealInputs {
   repairsMaintPerUnit: number;     // $/unit/yr, year-1 level
   utilitiesPerUnit: number;        // $/unit/yr, owner-paid, year-1 level
   reservesPerUnit: number;         // $/unit/yr, year-1 level
+  cltGroundLeasePerUnit: number;   // $/unit/yr paid to the CLT for the land + stewardship
   // Seller Profile
   totalFMV: number;
   originalCostBasis: number;
@@ -130,6 +131,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   repairsMaintPerUnit: 1200,
   utilitiesPerUnit: 1150,
   reservesPerUnit: 400,
+  cltGroundLeasePerUnit: 300, // ~$25/unit/mo stewardship fee; see TOOLTIPS.groundLease
   totalFMV: 1250000,
   originalCostBasis: 475000,
   accumulatedDepreciation: 356250,
@@ -189,6 +191,7 @@ export const ESCALATORS = {
   INSURANCE: 0.08,               // habitational hard market
   PROPERTY_TAX: 0.03,            // levy growth + reappraisal cycle
   MANAGEMENT: 0.03,              // replaces the one-time ×1.15 bump (1.03^5 ≈ 1.159)
+  GROUND_LEASE: 0.015,           // CLT ground lease: slow CPI-style step, held low for affordability
   GENERAL: 0.025,                // R&M, reserves fallback
 } as const;
 
@@ -307,6 +310,12 @@ export interface InvestorMetrics {
   irrWithoutReps: number | null;
   equityMultiple: number;
   paybackYear: number | null;
+  // Plain-English ROI view (active REPS toggle):
+  year1TaxRefund: number;          // Year-1 federal + state tax cash back
+  effectiveCapitalAtRisk: number;  // capital − Year-1 refund
+  totalReturned: number;           // sum of positive annual cash flows
+  netProfit: number;               // totalReturned − capital
+  simpleRoi: number;               // netProfit ÷ capital (whole-hold, undiscounted)
   optimalWhen: string[];
 }
 
@@ -317,6 +326,7 @@ export interface OpexBreakdown {
   repairsMaint: number;
   utilities: number;
   reserves: number;
+  groundLease: number;
   total: number;
 }
 
@@ -376,6 +386,8 @@ export const TOOLTIPS = {
     '100% first-year write-off on appliances, site work, and the cost-segregated share of the purchased buildings (2025 law, permanent, includes used property). The building shell depreciates over 27.5 years. Ohio adds back 5/6 of the bonus and returns it over five years. For your CPA: § 168(k) as amended by OBBBA; ORC 5747.01 addback.',
   costSegBase:
     'An engineering study can reclassify part of the purchased buildings for immediate write-off. 20–30% is the honest range for garden apartments; 25% survives review without argument. The base is the purchase price — the buyers acquire improvements only (land goes to the CLT).',
+  roiStory:
+    'How to read the investor return: put in capital, get a large share back within ~12 months as a Year-1 tax refund (the 100% bonus depreciation shelters the investor\'s other income — the LLC is a pass-through, so this lands on the members\' own returns). The middle years are intentionally quiet — bonus depreciation front-loads ~75% of the write-off into Year 1, and the small remaining depreciation is offset by the phantom income of note principal paydown. Capital (plus any accrued preferred) returns at the takeout. The depreciation is a real federal subsidy only a taxable investor can capture — a grant, CDFI, or the CLT cannot — which is what lets investors accept a below-market preferred return and keeps tenant rent low.',
   niit:
     'An extra 3.8% federal tax on investment income above $250k (married) / $200k (single). Spreading the sale keeps most years under the line — a lump-sum sale maximizes it. Applied automatically per year.',
   ltcgBracket:
@@ -391,7 +403,9 @@ export const TOOLTIPS = {
   vacancyGrossUp:
     'Required rents are grossed up for empty units and unpaid rent: ÷ (1 − vacancy), so occupied units carry the full requirement.',
   requiredRent:
-    'This is the rent needed to cover actual costs — loan payments, taxes, insurance, management, repairs, owner-paid utilities, replacement savings, and the investor return — not a market estimate. If it sits below market comps ($900–1,100 here), the gap is the deal\'s affordability margin.',
+    'This is the rent needed to cover actual costs — loan payments, taxes, insurance, management, repairs, owner-paid utilities, replacement savings, the CLT ground lease, and the investor return — not a market estimate. If it sits below market comps ($900–1,100 here), the gap is the deal\'s affordability margin.',
+  groundLease:
+    'What the co-op pays the Community Land Trust each year to lease the land it sits on (the CLT owns the land after the gift). Keep it at a stewardship level — enough to fund the CLT\'s perpetual monitoring, not to extract land rent — because every dollar here raises tenant rent. Typical affordability-CLT fees run ~$300–600/unit/yr. IMPORTANT (keep separate from management): pure land rent is exempt from the CLT\'s unrelated-business income tax under § 512(b)(3); if the CLT also renders substantial services (management, maintenance), that can taint the rent\'s exemption. Route any CLT management through a distinct service agreement, evaluated on its own for relatedness to the CLT\'s exempt purpose.',
   municipalTax:
     'Yellow Springs charges 1.5%, but Ohio law bars cities from taxing interest or capital gains — so it never touches the seller\'s loan income, only positive rental profits (which large depreciation zeroes out in most years).',
   ohioBID:
@@ -444,8 +458,12 @@ function opexAt(inputs: DealInputs, year: number): OpexBreakdown {
     repairsMaint: escalate(inputs.repairsMaintPerUnit * inputs.units, E.GENERAL, year),
     utilities: escalate(inputs.utilitiesPerUnit * inputs.units, E.UTILITIES, year),
     reserves: escalate(inputs.reservesPerUnit * inputs.units, E.GENERAL, year),
+    groundLease: escalate(inputs.cltGroundLeasePerUnit * inputs.units, E.GROUND_LEASE, year),
   };
-  return { ...b, total: b.propertyTaxes + b.insurance + b.mgmt + b.repairsMaint + b.utilities + b.reserves };
+  return {
+    ...b,
+    total: b.propertyTaxes + b.insurance + b.mgmt + b.repairsMaint + b.utilities + b.reserves + b.groundLease,
+  };
 }
 
 // Seller state tax on note income for one year. Business-income treatment
@@ -1012,6 +1030,13 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
 
   const positives = active.flows.slice(1).reduce((a, b) => a + Math.max(0, b), 0);
   const equityMultiple = ctx.capitalRequired > 0 ? positives / ctx.capitalRequired : 0;
+  const year1TaxRefund = Math.max(
+    0,
+    active.rows[0].federalTaxCash + active.rows[0].stateTaxCash,
+  );
+  const effectiveCapitalAtRisk = ctx.capitalRequired - year1TaxRefund;
+  const netProfit = positives - ctx.capitalRequired;
+  const simpleRoi = ctx.capitalRequired > 0 ? netProfit / ctx.capitalRequired : 0;
   let paybackYear: number | null = null;
   {
     let cum = -ctx.capitalRequired;
@@ -1054,6 +1079,11 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
     irrWithReps,
     irrWithoutReps,
     equityMultiple,
+    year1TaxRefund,
+    effectiveCapitalAtRisk,
+    totalReturned: positives,
+    netProfit,
+    simpleRoi,
     paybackYear,
     optimalWhen,
   };

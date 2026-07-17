@@ -80,6 +80,11 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
               <OpexRow label="Owner-Paid Utilities" v1={o1.utilities} v2={o2.utilities} esc={ESCALATORS.UTILITIES} />
               <OpexRow label="Replacement Reserves" v1={o1.reserves} v2={o2.reserves} esc={ESCALATORS.GENERAL} />
               <tr className="hover:bg-muted/30 transition-colors">
+                <td className="py-2.5 px-4 text-left">CLT Ground Lease <InfoTooltip text={tooltips.groundLease} /></td>
+                <td className="py-2.5 px-4">{formatCurrency(o1.groundLease)}</td>
+                <td className="py-2.5 px-4">{formatCurrency(o2.groundLease)} <span className="text-[9px] text-muted-foreground ml-1">+{(ESCALATORS.GROUND_LEASE * 100).toFixed(1)}%/yr</span></td>
+              </tr>
+              <tr className="hover:bg-muted/30 transition-colors">
                 <td className="py-2.5 px-4 text-left">Investor Preferred Return <InfoTooltip text={tooltips.pikPref} /></td>
                 <td className="py-2.5 px-4">
                   {inputs.prefCurrentPay
