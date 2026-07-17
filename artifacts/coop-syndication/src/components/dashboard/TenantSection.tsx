@@ -1,5 +1,5 @@
 import React from 'react';
-import { DealMetrics, TOOLTIPS } from '@/utils/calculations';
+import { DealMetrics, TOOLTIPS, ESCALATORS } from '@/utils/calculations';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import { InfoTooltip } from './InfoTooltip';
 import { AlertTriangle } from 'lucide-react';
@@ -7,7 +7,15 @@ import { AlertTriangle } from 'lucide-react';
 export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltips: typeof TOOLTIPS }) {
   const { tenant, inputs } = model;
   const isCliff = tenant.isRentCliff;
-  const ob = tenant.opexBreakdown;
+  const o1 = tenant.opexYear1;
+  const o2 = tenant.opexBuyoutYear;
+  const p2Year = inputs.balloonYear + 1;
+  // The Phase-2 jump accumulates over the whole Phase-1 period — show the
+  // equivalent annual drift so a 5-year 12% move reads as ~2.4%/yr, not a cliff.
+  const annualizedJump =
+    tenant.phase1MonthlyRent > 0 && inputs.balloonYear > 0
+      ? (Math.pow(tenant.phase2MonthlyRent / tenant.phase1MonthlyRent, 1 / inputs.balloonYear) - 1) * 100
+      : 0;
 
   return (
     <section className="flex flex-col space-y-4">
@@ -19,13 +27,13 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
         <div className="bg-card border border-border p-6 rounded-md flex flex-col items-center justify-center space-y-2 text-center">
           <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-semibold">Current Rent</span>
           <span className="text-3xl font-light tabular-nums text-foreground">{formatCurrency(inputs.currentRent)}</span>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Baseline</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Baseline &mdash; market comps $900&ndash;$1,100</span>
         </div>
 
         <div className="bg-card border border-border p-6 rounded-md flex flex-col items-center justify-center space-y-2 text-center">
           <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-semibold">Phase 1 Rent <InfoTooltip text={tooltips.requiredRent} /></span>
           <span className="text-3xl font-light tabular-nums text-foreground">{formatCurrency(tenant.phase1MonthlyRent)}</span>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Years 1&ndash;{inputs.balloonYear}</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Years 1&ndash;{inputs.balloonYear} (Year-1 costs)</span>
           <span className={`text-[11px] font-medium ${tenant.rentDelta <= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
             {tenant.rentDelta > 0 ? '+' : ''}{formatCurrency(tenant.rentDelta)} vs current
           </span>
@@ -42,9 +50,9 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
           )}
           <span className={`text-[11px] uppercase tracking-widest font-semibold ${isCliff ? 'text-destructive' : 'text-emerald-500/80'}`}>Phase 2 Rent</span>
           <span className="text-3xl font-light tabular-nums font-bold">{formatCurrency(tenant.phase2MonthlyRent)}</span>
-          <span className={`text-[10px] uppercase tracking-widest ${isCliff ? 'text-destructive/80' : 'text-emerald-500/60'}`}>Year {inputs.balloonYear + 1}+</span>
+          <span className={`text-[10px] uppercase tracking-widest ${isCliff ? 'text-destructive/80' : 'text-emerald-500/60'}`}>Year {p2Year}+ (escalated costs) <InfoTooltip text={tooltips.escalators} /></span>
           <span className="text-[11px] font-medium">
-            {tenant.rentJumpPct > 0 ? '+' : ''}{formatPercent(tenant.rentJumpPct)} vs Phase 1
+            {tenant.rentJumpPct > 0 ? '+' : ''}{formatPercent(tenant.rentJumpPct)} vs Phase 1 &asymp; {formatPercent(annualizedJump)}/yr drift
           </span>
         </div>
       </div>
@@ -55,8 +63,8 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
                 <th className="py-3 px-4 font-medium text-left">Revenue Build-Up</th>
-                <th className="py-3 px-4 font-medium">Phase 1 (Years 1&ndash;{inputs.balloonYear})</th>
-                <th className="py-3 px-4 font-medium">Phase 2 (Year {inputs.balloonYear + 1}+)</th>
+                <th className="py-3 px-4 font-medium">Phase 1 (Year-1 costs)</th>
+                <th className="py-3 px-4 font-medium">Phase 2 (Year-{p2Year} costs)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -65,39 +73,19 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
                 <td className="py-2.5 px-4">{formatCurrency(tenant.phase1AnnualDebtService)}</td>
                 <td className="py-2.5 px-4">{formatCurrency(tenant.phase2AnnualDebtService)}</td>
               </tr>
+              <OpexRow label="Property Taxes" v1={o1.propertyTaxes} v2={o2.propertyTaxes} esc={ESCALATORS.PROPERTY_TAX} />
+              <OpexRow label="Insurance & Misc" v1={o1.insurance} v2={o2.insurance} esc={ESCALATORS.INSURANCE} />
+              <OpexRow label="Management" v1={o1.mgmt} v2={o2.mgmt} esc={ESCALATORS.MANAGEMENT} />
+              <OpexRow label="Repairs & Maintenance" v1={o1.repairsMaint} v2={o2.repairsMaint} esc={ESCALATORS.GENERAL} />
+              <OpexRow label="Owner-Paid Utilities" v1={o1.utilities} v2={o2.utilities} esc={ESCALATORS.UTILITIES} />
+              <OpexRow label="Replacement Reserves" v1={o1.reserves} v2={o2.reserves} esc={ESCALATORS.GENERAL} />
               <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Property Taxes</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.propertyTaxes)}</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.propertyTaxes)}</td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Insurance &amp; Misc</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.insurance)}</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.insurance)}</td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Management</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.mgmt)}</td>
-                <td className="py-2.5 px-4">{formatCurrency(tenant.phase2MgmtAnnual)} <span className="text-[9px] text-muted-foreground ml-1">&times;1.15</span></td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Repairs &amp; Maintenance</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.repairsMaint)}</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.repairsMaint)}</td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Owner-Paid Utilities</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.utilities)}</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.utilities)}</td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Replacement Reserves</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.reserves)}</td>
-                <td className="py-2.5 px-4">{formatCurrency(ob.reserves)}</td>
-              </tr>
-              <tr className="hover:bg-muted/30 transition-colors">
-                <td className="py-2.5 px-4 text-left">Investor Preferred Return</td>
-                <td className="py-2.5 px-4">{formatCurrency(tenant.prefAnnual)}</td>
+                <td className="py-2.5 px-4 text-left">Investor Preferred Return <InfoTooltip text={tooltips.pikPref} /></td>
+                <td className="py-2.5 px-4">
+                  {inputs.prefCurrentPay
+                    ? formatCurrency(tenant.prefInRent)
+                    : <span className="text-muted-foreground">$0 <span className="text-[9px] ml-1">accrues to buyout ({formatCurrency(tenant.accruedPrefAtExit)})</span></span>}
+                </td>
                 <td className="py-2.5 px-4 text-muted-foreground">&mdash; <span className="text-[9px] ml-1">investors taken out</span></td>
               </tr>
               <tr className="bg-muted/10 font-medium">
@@ -143,15 +131,27 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
 
         <div className="px-4 py-3 border-t border-border bg-muted/10 flex flex-col md:flex-row md:items-center justify-between text-[11px]">
           {tenant.balloonBeyondTerm ? (
-            <span className="text-muted-foreground italic">Note self-amortizes before the balloon year &mdash; no balloon due.</span>
+            <span className="text-muted-foreground italic">Note self-amortizes before the buyout year &mdash; no balloon due.</span>
           ) : (
             <span className="text-muted-foreground flex items-center">
-              Phase 2 Refinance Burden = Balloon + Investor Capital Take-Out <InfoTooltip text={tooltips.refinanceBurden} />
+              Phase 2 Refinance = Balloon + Investor Capital{tenant.accruedPrefAtExit > 0 ? ' + Accrued Pref' : ''} <InfoTooltip text={tooltips.refinanceBurden} />
             </span>
           )}
           <span className="font-semibold tabular-nums mt-1 md:mt-0 text-foreground">{formatCurrency(tenant.phase2RefinanceBurden)}</span>
         </div>
       </div>
     </section>
+  );
+}
+
+function OpexRow({ label, v1, v2, esc }: { label: string; v1: number; v2: number; esc: number }) {
+  return (
+    <tr className="hover:bg-muted/30 transition-colors">
+      <td className="py-2.5 px-4 text-left">{label}</td>
+      <td className="py-2.5 px-4">{formatCurrency(v1)}</td>
+      <td className="py-2.5 px-4">
+        {formatCurrency(v2)} <span className="text-[9px] text-muted-foreground ml-1">+{(esc * 100).toFixed(1)}%/yr</span>
+      </td>
+    </tr>
   );
 }

@@ -1,43 +1,43 @@
 // ============================================================================
-// V5 CALCULATION ENGINE — Limited-Equity Co-op Conversion Underwriting
+// V5.2 CALCULATION ENGINE — Limited-Equity Co-op Conversion Underwriting
 // ============================================================================
 // Single entry point: calculateDealMetrics(inputs). Pure, typed, no UI
 // side-effects. Components must contain zero math.
 //
-// V5 supersedes the V4 "exact algebra" engine. The V4/Gemini-primer positions
-// that were CORRECTED here (each documented in docs/ANALYSIS.md):
+// V5.2 implements the accepted subset of docs/REVIEW-2026-07.md and
+// docs/defaults-v5.1.patch.ts (engine changes 1–8), triaged for complexity:
 //
-//  1. § 453(i) "recapture bomb" REMOVED for straight-line residential real
-//     property. § 453(i) accelerates only ordinary recapture under §§ 1245/
-//     1250. Post-1986 residential rental is straight-line, so there is no
-//     § 1250 ordinary recapture; the 25% "unrecaptured § 1250 gain" is NOT
-//     accelerated — it spreads over installments, recognized FIRST within
-//     each payment's gain (Reg. § 1.453-12 ordering).
-//  2. Gross Profit Ratio computed on the CONTRACT PRICE (FMV − donated land),
-//     not total FMV, with adjusted basis apportioned pro-rata between the
-//     gift and sale parts (§ 1011(b) bargain-sale principle). GPR ∈ [0, 1].
-//  3. Accumulated depreciation is clamped at the depreciable (building)
-//     share of basis — land never depreciates and basis cannot go below zero,
-//     so "negative adjusted basis / GPR > 100%" cannot occur.
-//  4. § 170 shield: 30%-of-AGI annual limit for appreciated long-term
-//     property to a public charity, usable in the contribution year plus a
-//     5-year carryforward (6 usable years; first zero-shield year is Year 7,
-//     not Year 6). Ohio allows NO charitable deduction (no itemized
-//     deductions against the state flat tax), and Ohio municipalities cannot
-//     tax intangible income (interest, capital gains) under ORC 718 — the
-//     local rate therefore never touches the seller's note income.
-//  5. Investor cost-seg bonus base = purchase price (the improvements the
-//     buyer actually acquires — land goes to the CLT), not 75% of total FMV.
-//  6. Rent requirement now includes repairs/maintenance, owner-paid
-//     utilities, replacement reserves, and a current-pay investor preferred
-//     return — the missing lines that made V4 rents implausibly low.
-//  7. Investor exit is taxed: five years of depreciation drives the basis
-//     down, so the Year-5 takeout triggers gain (~25% bucket up to
-//     depreciation taken). IRR is computed on post-tax flows, with and
-//     without REPS (§ 469(c)(7)).
-//  8. NIIT (3.8% over $250k MAGI) and the 20% LTCG bracket are applied
-//     automatically per-year, which is precisely why the installment
-//     structure beats a lump-sum cash sale for this seller.
+//  IMPLEMENTED
+//  1. Asset-level basis split (NOT § 1011(b) pro-rata): the land parcel and
+//     its basis go to the CLT gift; the building's adjusted basis goes to
+//     the co-op sale. Two assets, two counterparties, no bargain element.
+//  2. OBBBA 0.5%-of-AGI charitable floor (2026+): the first 0.5% of AGI of
+//     contributions claimed each year is disallowed and does NOT carry over.
+//  3. § 1245 ordinary-rate exit recapture via exitShortLifeAllocationPct —
+//     the negotiated share of exit price allocated to short-life property.
+//  4. Ohio Business Income Deduction (first $250k/yr deducted, 3% above),
+//     behind a "CPA-confirmed" toggle, applied to seller note income and
+//     investor rental profits during the hold.
+//  5. § 199A QBI: 20% deduction on positive REPS-year rental income.
+//  6. Per-line opex escalators compounding from Year 1; Phase-2 rent and the
+//     rent-cliff alert are computed on BUYOUT-YEAR escalated opex.
+//     Management: 3%/yr escalator replaces the one-time ×1.15 bump.
+//  7. PIK preferred toggle: accrue the 7% pref to the buyout instead of
+//     current-paying it from rents (the tenant affordability relief valve).
+//  8. Filing-status-driven NIIT threshold and 20% LTCG breakpoint (2026).
+//
+//  DEFERRED (recorded, not built — see docs/ANALYSIS.md V5.2 addendum)
+//  – JSON preset / 4-layer config architecture ("US-2026", jurisdiction
+//    packs); constants are grouped by layer below as the seam for it.
+//  – capexPlacedInServiceYear per bucket, buyout month/year, CPI indexation
+//    of investor capital (decision: default OFF), display-dollars toggle,
+//    transfer-type selector (tooltips carry the gift-vs-stepped-up fork).
+//
+//  STRUCTURAL DECISIONS ALREADY MADE (do not relitigate — handoff §2):
+//  – Exit is a fixed-formula purchase option in the CLT ground lease:
+//    unreturned capital + accrued unpaid pref + balloon payoff. No
+//    appreciation participation. Engine exit price is formula-consistent.
+//  – No bargain-sale / Rev. Rul. 82-197 deduction at exit.
 // ============================================================================
 
 import { pmt, remainingBalance, irr, npv } from './finance';
@@ -46,58 +46,81 @@ import { pmt, remainingBalance, irr, npv } from './finance';
 // Inputs
 // ----------------------------------------------------------------------------
 
+export type FilingStatus = 'single' | 'mfj';
+
 export interface DealInputs {
   // Property & Operations
-  units: number;                   // 10–50
-  currentRent: number;             // $/mo, 400–1500
-  vacancyRate: number;             // %, 0–15
-  propertyTaxes: number;           // $/yr
-  annualInsuranceMisc: number;     // $/yr
-  mgmtFeePerDoor: number;          // $/door/mo
-  repairsMaintPerUnit: number;     // $/unit/yr
-  utilitiesPerUnit: number;        // $/unit/yr, owner-paid common/water/sewer/trash
-  reservesPerUnit: number;         // $/unit/yr, replacement reserves
+  units: number;
+  currentRent: number;             // $/mo
+  vacancyRate: number;             // %
+  propertyTaxes: number;           // $/yr, year-1 level
+  annualInsuranceMisc: number;     // $/yr, year-1 level
+  mgmtFeePerDoor: number;          // $/door/mo, year-1 level
+  repairsMaintPerUnit: number;     // $/unit/yr, year-1 level
+  utilitiesPerUnit: number;        // $/unit/yr, owner-paid, year-1 level
+  reservesPerUnit: number;         // $/unit/yr, year-1 level
   // Seller Profile
   totalFMV: number;
-  originalCostBasis: number;       // 1993 transferred basis
+  originalCostBasis: number;
   accumulatedDepreciation: number; // clamped to building share of basis
-  cltLandDonation: number;         // FMV of land donated to the CLT
-  sellerOtherIncome: number;       // $/yr baseline AGI outside the deal
-  sellerOrdinaryRate: number;      // % federal marginal ordinary rate
-  discountRate: number;            // % NPV discount for scenario comparison
+  cltLandDonation: number;         // appraised FMV of the donated land parcel
+  sellerOtherIncome: number;
+  sellerOrdinaryRate: number;      // % federal marginal
+  sellerFilingStatus: FilingStatus;
+  discountRate: number;            // % NPV discount
   // Deal Structure
-  sellerDownPaymentPct: number;    // % of contract price
-  sellerInterestRate: number;      // %
-  noteTermYears: number;           // amortization term
-  balloonYear: number;             // takeout / Phase 2 boundary
-  phase2CommercialRate: number;    // % refinance rate
-  stateTaxRate: number;            // % Ohio flat income tax
-  localTaxRate: number;            // % municipal (earned income / net profits only)
+  sellerDownPaymentPct: number;
+  sellerInterestRate: number;
+  noteTermYears: number;
+  balloonYear: number;
+  phase2CommercialRate: number;
+  stateTaxRate: number;            // % flat state income tax (nonbusiness)
+  localTaxRate: number;            // % municipal (net profits only)
+  ohioBIDConfirmed: boolean;       // Ohio Business Income Deduction, CPA-confirmed
   // Investor Profile & New CapEx
-  investorPrefReturn: number;      // % current-pay preferred on invested capital
-  investorMarginalRate: number;    // % federal marginal (W-2) rate
-  investorHasREPS: boolean;        // § 469(c)(7) real estate professional status
-  capexRoofStruct: number;         // 27.5-yr
-  capexParkingLand: number;        // 15-yr
-  capexAppliances: number;         // 5-yr
+  investorPrefReturn: number;      // %
+  prefCurrentPay: boolean;         // true = paid from rents; false = accrues (PIK)
+  investorMarginalRate: number;    // %
+  investorHasREPS: boolean;
+  exitShortLifeAllocationPct: number; // % of short-life depreciation recaptured ordinary at exit
+  capexRoofStruct: number;
+  capexParkingLand: number;
+  capexAppliances: number;
 }
 
+// Defaults re-underwritten July 2026 (docs/REVIEW-2026-07.md §3–5):
+// - totalFMV $1.25M: as-is value at $700 in-place rents with deferred
+//   maintenance. Income approach: EGI ~$202k − realistic YS opex ~$126k
+//   (ex-reserves) = NOI ~$75k at a 6.5–7.5% Class-C village cap = $1.0–1.15M;
+//   sales comps ~$50k/door Dayton-metro C garden with a Yellow Springs
+//   premium and the 3.58-acre site = $1.2–1.35M. $1.5M was a stabilized
+//   (post-renovation, market-rent) number, not an as-is one.
+// - cltLandDonation $430k (34.4% of FMV): just inside the $436k (34.9%)
+//   maximum the seller fully absorbs within the § 170 six-year window at
+//   these defaults (findMaxAbsorbableDonation), leaving margin for appraisal
+//   drift. 30% of FMV ($375k) absorbs with slack; 40% ($500k) strands ~$87k
+//   of deduction. Must be supported by a qualified appraisal of the
+//   3.58-acre parcel.
+// - Basis $475k / dep $356,250: 1993 stepped-up estimate (three-method
+//   convergence $425–525k). If the 1993 transfer was a GIFT, use $250k
+//   carryover. The real number is on the seller's Form 4562.
 export const DEFAULT_INPUTS: DealInputs = {
   units: 25,
   currentRent: 700,
   vacancyRate: 4,
-  propertyTaxes: 28472,
-  annualInsuranceMisc: 15000,
+  propertyTaxes: 30000,
+  annualInsuranceMisc: 22500,
   mgmtFeePerDoor: 50,
-  repairsMaintPerUnit: 900,
-  utilitiesPerUnit: 600,
-  reservesPerUnit: 300,
-  totalFMV: 1500000,
-  originalCostBasis: 250000,
-  accumulatedDepreciation: 185000,
-  cltLandDonation: 440000,
+  repairsMaintPerUnit: 1200,
+  utilitiesPerUnit: 1150,
+  reservesPerUnit: 400,
+  totalFMV: 1250000,
+  originalCostBasis: 475000,
+  accumulatedDepreciation: 356250,
+  cltLandDonation: 430000,
   sellerOtherIncome: 75000,
   sellerOrdinaryRate: 24,
+  sellerFilingStatus: 'mfj',
   discountRate: 5,
   sellerDownPaymentPct: 15,
   sellerInterestRate: 6,
@@ -106,31 +129,58 @@ export const DEFAULT_INPUTS: DealInputs = {
   phase2CommercialRate: 7,
   stateTaxRate: 2.75,
   localTaxRate: 1.5,
+  ohioBIDConfirmed: true,
   investorPrefReturn: 7,
+  prefCurrentPay: true,
   investorMarginalRate: 35,
   investorHasREPS: true,
+  exitShortLifeAllocationPct: 50,
   capexRoofStruct: 90000,
   capexParkingLand: 50000,
   capexAppliances: 40000,
 };
 
-export const CONSTANTS = {
-  UNRECAP_1250_RATE: 0.25,        // cap-gain rate ceiling on unrecaptured § 1250 gain
+// Constants grouped by future preset layer (UX-CONFIG-SPEC-v5.2 §1). The
+// grouping is the seam for the deferred JSON-preset architecture.
+export const TAX_POLICY = {
+  UNRECAP_1250_RATE: 0.25,
   LTCG_RATE_LOW: 0.15,
   LTCG_RATE_HIGH: 0.20,
-  LTCG_HIGH_THRESHOLD: 550000,    // approx. taxable-income breakpoint for the 20% bracket
+  LTCG_HIGH_THRESHOLD: { single: 533400, mfj: 613700 } as Record<FilingStatus, number>, // 2026
   NIIT_RATE: 0.038,
-  NIIT_MAGI_THRESHOLD: 250000,    // MFJ
-  CHARITY_AGI_LIMIT: 0.30,        // appreciated LT property to a public charity
-  CHARITY_USABLE_YEARS: 6,        // contribution year + 5-year carryforward
-  BUILDING_RATIO: 0.75,           // building share of basis/value; land = 25%
-  COST_SEG_SHORT_LIFE_PCT: 0.30,  // share of acquired improvements reclassed 5/15-yr
+  NIIT_MAGI_THRESHOLD: { single: 200000, mfj: 250000 } as Record<FilingStatus, number>,
+  CHARITY_AGI_LIMIT: 0.30,
+  CHARITY_FLOOR_AGI: 0.005,      // OBBBA floor, contributions after 12/31/2025
+  CHARITY_USABLE_YEARS: 6,       // contribution year + 5-yr carryforward
+  QBI_DEDUCTION: 0.20,           // § 199A on qualified rental income
   RESIDENTIAL_LIFE: 27.5,
-  REFI_AMORT_YEARS: 30,
-  MGMT_INFLATION_P2: 1.15,
-  RENT_CLIFF_THRESHOLD_PCT: 10,
-  OHIO_BONUS_ADDBACK: 5 / 6,      // Ohio § 168(k) addback, deducted 1/5 over 5 yrs
 } as const;
+
+export const JURISDICTION = {
+  OHIO_BONUS_ADDBACK: 5 / 6,     // § 168(k) addback, recovered 1/5 over 5 yrs
+  OHIO_BID_CAP: 250000,          // Business Income Deduction: first $250k/yr
+  OHIO_BID_RATE: 0.03,           // flat 3% above the cap
+  MUNI_TAXES_INTANGIBLES: false, // ORC 718: interest/gains municipally exempt
+} as const;
+
+export const ESCALATORS = {
+  UTILITIES: 0.08,               // YS ordinance-locked water increases; PFAS after
+  INSURANCE: 0.08,               // habitational hard market
+  PROPERTY_TAX: 0.03,            // levy growth + reappraisal cycle
+  MANAGEMENT: 0.03,              // replaces the one-time ×1.15 bump (1.03^5 ≈ 1.159)
+  GENERAL: 0.025,                // R&M, reserves fallback
+} as const;
+
+export const DEAL_CONSTANTS = {
+  BUILDING_RATIO: 0.75,          // building share of basis; land = 25%
+  COST_SEG_SHORT_LIFE_PCT: 0.25, // mid-range for garden apartments (was 0.30)
+  REFI_AMORT_YEARS: 30,
+  RENT_CLIFF_THRESHOLD_PCT: 10,
+  MAX_DONATION_PCT_OF_FMV: 0.40, // search ceiling for the § 170 optimizer
+} as const;
+
+// Back-compat aggregate (sanity scripts, tests).
+export const CONSTANTS = { ...TAX_POLICY, ...JURISDICTION, ...DEAL_CONSTANTS, ESC: ESCALATORS } as const;
 
 // ----------------------------------------------------------------------------
 // Output shapes
@@ -139,12 +189,12 @@ export const CONSTANTS = {
 export interface SellerYearRow {
   year: number;
   interestReceived: number;
-  principalReceived: number;       // incl. down payment (yr 1) and balloon
+  principalReceived: number;
   grossCashReceived: number;
   gainRecognized: number;
-  gain25: number;                  // unrecaptured § 1250 portion (25%)
-  gainLtcg: number;                // 15/20% portion
-  charitableDeductionUsed: number;
+  gain25: number;
+  gainLtcg: number;
+  charitableDeductionUsed: number; // after the 0.5% AGI floor
   federalTax: number;
   stateTax: number;
   niitTax: number;
@@ -152,7 +202,7 @@ export interface SellerYearRow {
   postTaxCash: number;
   cumulativePostTaxCash: number;
   remainingNoteBalance: number;
-  shieldActive: boolean;           // any § 170 deduction applied this year
+  shieldActive: boolean;
   isBalloonYear: boolean;
 }
 
@@ -168,12 +218,12 @@ export interface SellerMetrics {
   downPayment: number;
   financedPrincipal: number;
   totalAdjustedBasis: number;
-  soldAdjustedBasis: number;
-  donatedBasisAllocated: number;
+  soldAdjustedBasis: number;       // building adjusted basis (asset-level split)
+  donatedBasisAllocated: number;   // land basis, gifted with the parcel
   clampedDepreciation: number;
   depWasClamped: boolean;
   grossProfit: number;
-  grossProfitRatio: number;        // ∈ [0, 1]
+  grossProfitRatio: number;
   unrecap1250Total: number;
   schedule: SellerYearRow[];
   year1Tax: number;
@@ -182,31 +232,32 @@ export interface SellerMetrics {
   isTaxExceedsDP: boolean;
   charitable: {
     total: number;
-    used: number;
-    unused: number;
-    utilizationPct: number;
-    firstZeroShieldYear: number;   // year 7 under § 170(d)
+    used: number;                  // deducted after floor
+    floorLost: number;             // disallowed by the 0.5% AGI floor (never carries)
+    expired: number;               // carryforward remaining after Year 6
+    utilizationPct: number;        // used ÷ total
+    firstZeroShieldYear: number;
   };
   comparison: {
     straightCash: SellerScenario;
     cashPlusDonation: SellerScenario;
     installmentPlusDonation: SellerScenario;
-    npvAdvantageVsCash: number;    // installment NPV − straight-cash net
+    npvAdvantageVsCash: number;
     nominalAdvantageVsCash: number;
   };
 }
 
 export interface InvestorYearRow {
   year: number;
-  capitalInjected: number;         // year 1 only
-  operatingCashFlow: number;       // preferred return, current pay
+  capitalInjected: number;
+  operatingCashFlow: number;       // current-pay pref ($0 in PIK mode)
   depreciation: number;
-  taxableRentalIncome: number;     // pref + principal amortized − depreciation
-  federalTaxCash: number;          // + = savings, − = tax paid (REPS-dependent)
-  stateTaxCash: number;            // Ohio w/ 5/6 bonus addback (REPS mode)
-  localTax: number;                // municipal net-profits tax on positive rental income
-  suspendedLossBalance: number;    // non-REPS mode
-  exitProceeds: number;            // capital return − exit tax (+ loss release), exit yr
+  taxableRentalIncome: number;
+  federalTaxCash: number;
+  stateTaxCash: number;
+  localTax: number;
+  suspendedLossBalance: number;
+  exitProceeds: number;            // capital + accrued pref (net of tax) − exit tax
   netCashFlow: number;
   cumulativePosition: number;
   isExitYear: boolean;
@@ -214,45 +265,53 @@ export interface InvestorYearRow {
 
 export interface InvestorMetrics {
   capitalRequired: number;
-  purchaseBasis: number;           // contract price (improvements only; land → CLT)
+  purchaseBasis: number;
   year1Bonus: { costSeg: number; parkingLand: number; appliances: number; total: number };
-  annualSL: number;                // 27.5-yr straight-line on non-seg building + roof
-  schedule: InvestorYearRow[];     // reflects the current REPS toggle
+  annualSL: number;
+  accruedPrefAtExit: number;       // PIK mode only; 0 when current-pay
+  schedule: InvestorYearRow[];
   exit: {
     year: number;
-    salePrice: number;
+    salePrice: number;             // formula price for the property (balloon + capital)
     adjustedBasisAtExit: number;
     gain: number;
+    exitOrdinary: number;          // § 1245 tranche at investor marginal rate
+    exit25: number;
+    exit15: number;
     exitTax: number;
     netToInvestors: number;
   };
-  irrWithReps: number | null;      // fraction
+  irrWithReps: number | null;
   irrWithoutReps: number | null;
-  equityMultiple: number;          // on the active REPS toggle
+  equityMultiple: number;
   paybackYear: number | null;
   optimalWhen: string[];
 }
 
+export interface OpexBreakdown {
+  propertyTaxes: number;
+  insurance: number;
+  mgmt: number;
+  repairsMaint: number;
+  utilities: number;
+  reserves: number;
+  total: number;
+}
+
 export interface TenantMetrics {
-  opexAnnual: number;              // taxes + insurance + mgmt + R&M + utilities + reserves
-  opexBreakdown: {
-    propertyTaxes: number;
-    insurance: number;
-    mgmt: number;
-    repairsMaint: number;
-    utilities: number;
-    reserves: number;
-  };
-  prefAnnual: number;
+  opexYear1: OpexBreakdown;
+  opexBuyoutYear: OpexBreakdown;   // escalated to year balloonYear + 1
+  prefAnnual: number;              // funded from rents only when prefCurrentPay
+  prefInRent: number;              // prefAnnual or 0 (PIK)
   phase1AnnualDebtService: number;
   phase1AnnualRevenueReq: number;
   phase1MonthlyRent: number;
   rentDelta: number;
   balloonBalance: number;
   balloonBeyondTerm: boolean;
-  phase2RefinanceBurden: number;
+  accruedPrefAtExit: number;
+  phase2RefinanceBurden: number;   // balloon + capital + accrued pref (PIK)
   phase2AnnualDebtService: number;
-  phase2MgmtAnnual: number;
   phase2AnnualRevenueReq: number;
   phase2MonthlyRent: number;
   rentJumpPct: number;
@@ -277,70 +336,117 @@ export interface DealMetrics {
 }
 
 // ----------------------------------------------------------------------------
-// Tooltip copy
+// Tooltip copy — plain language first, statutory detail second
+// (UX-CONFIG-SPEC-v5.2 §2)
 // ----------------------------------------------------------------------------
 
 export const TOOLTIPS = {
   recapture453i:
-    'IRC § 453(i) accelerates only ORDINARY recapture (§§ 1245/1250) into the year of sale. Post-1986 residential rental is straight-line, so there is no § 1250 ordinary recapture here. The 25% "unrecaptured § 1250 gain" is not accelerated: it spreads over the installments and is recognized FIRST within each payment\'s gain (Reg. § 1.453-12).',
+    'Past depreciation is taxed at up to 25% as sale payments arrive — it is NOT all due in year one for a building depreciated the normal way. For your CPA: no § 453(i) acceleration applies to straight-line residential realty; unrecaptured § 1250 gain spreads over the installments, recognized first within each payment (Reg. § 1.453-12).',
   grossProfitPct:
-    'Gross Profit Ratio = (Contract Price − Basis Allocated to the Sale) ÷ Contract Price, where Contract Price = FMV − donated land and basis is apportioned pro-rata between the gift and sale parts under the § 1011(b) bargain-sale principle. Bounded 0–100% — depreciation is clamped at depreciable basis, so basis can never go negative.',
+    'The share of every dollar of principal collected that counts as taxable profit. For your CPA: asset-level basis — the land basis follows the CLT gift, the building\'s adjusted basis offsets the co-op sale; two assets, two counterparties, no § 1011(b) bargain element.',
   charitable170:
-    'IRC § 170: donating appreciated long-term property to a public charity (the CLT) deducts fair market value, limited to 30% of AGI per year, usable in the contribution year plus a 5-year carryforward (§ 170(d)) — six years total; Year 7 is the first zero-shield year. Ohio allows no charitable deduction against its flat tax, and Ohio municipalities cannot tax interest or capital gains at all (ORC 718).',
+    'The land gift is deductible up to 30% of income per year for six years total; the first 0.5% of income is disallowed each year (2026 law) and unused amounts expire after year six — the dashboard warns if any would. Ohio gives no state deduction for it. For your CPA: §§ 170(b)(1)(C), 170(d); OBBBA floor for contributions after 12/31/2025; qualified appraisal + Form 8283 mandatory.',
   reps469c7:
-    'IRC § 469(c)(7): without Real Estate Professional Status (750+ hours, material participation), rental losses are passive — they cannot offset W-2 income and suspend until disposition (§ 469(g)), releasing as a lump deduction at the Year-5 takeout. With REPS, losses offset ordinary income annually. Toggle REPS to see both timelines.',
+    'ON: investors (or spouses) qualify as real-estate professionals and use the deal\'s paper losses against regular income each year. OFF: losses are locked up until the buyout and arrive as one lump deduction. This toggle is worth roughly two points of IRR. For your CPA: § 469(c)(7); § 469(g) release at disposition; REPS also exempts the rental income from NIIT.',
   bonus168k:
-    'IRC § 168(k) as amended by OBBBA (2025): 100% first-year bonus depreciation, permanent, including used property. Applies to the 5-yr and 15-yr classes — new appliance/site CapEx plus the cost-segregated share of the ACQUIRED improvements. The 27.5-yr residential shell never qualifies for bonus. Ohio decouples: 5/6 of bonus is added back and recovered over the following five years.',
+    '100% first-year write-off on appliances, site work, and the cost-segregated share of the purchased buildings (2025 law, permanent, includes used property). The building shell depreciates over 27.5 years. Ohio adds back 5/6 of the bonus and returns it over five years. For your CPA: § 168(k) as amended by OBBBA; ORC 5747.01 addback.',
   costSegBase:
-    'The buyers acquire the improvements only (land goes to the CLT), so the depreciable base is the contract price — not 75% of total FMV. A cost-segregation study reclassifying 30% into 5/15-yr classes is the aggressive end of the typical 20–30% range for garden apartments; treat it as requiring an engineering study.',
+    'An engineering study can reclassify part of the purchased buildings for immediate write-off. 20–30% is the honest range for garden apartments; 25% survives review without argument. The base is the purchase price — the buyers acquire improvements only (land goes to the CLT).',
   niit:
-    'The 3.8% Net Investment Income Tax applies to interest and gains once MAGI exceeds $250k (MFJ). Spreading gain over installments keeps most years below the threshold — a lump-sum cash sale maximizes NIIT exposure. Applied automatically per year.',
+    'An extra 3.8% federal tax on investment income above $250k (married) / $200k (single). Spreading the sale keeps most years under the line — a lump-sum sale maximizes it. Applied automatically per year.',
   ltcgBracket:
-    'Long-term gain is taxed at 15% until taxable income crosses ≈$550k, then 20%. A lump-sum sale pushes most of the gain into the 20% bracket + NIIT; installments keep annual gain in the 15% bracket. Applied automatically per year.',
+    'Long-term gains are taxed at 15% until income crosses ~$614k (married, 2026; ~$533k single), then 20%. Installments keep annual gain in the 15% bracket; a lump-sum sale pushes most of it to 20% + surtax.',
   exitTax:
-    'Bonus depreciation is a deferral, not an exemption: five years of deductions cut the entity\'s basis, so the Year-5 co-op takeout triggers gain — modeled at 25% up to total depreciation taken (§ 1245 ordinary recapture on personal-property components could raise this), 15% above. Investor IRR is net of this exit tax.',
+    'Five years of write-offs lower the property\'s tax basis, so the buyout triggers a tax bill — the write-offs are a deferral, not a gift. How much is taxed at high ordinary rates vs. 25%/15% depends on the negotiated exit price allocation (see the "Exit value on short-life items" slider — worth 1.5–2.5 points of IRR). For your CPA: § 1245 ordinary recapture on cost-seg/short-life property; unrecaptured § 1250 on the shell.',
+  exitAllocation:
+    'At buyout, how much of the price is attributed to appliances/site work (taxed at high ordinary rates) versus the building (25%/15%). Five-year-old appliances justify a low number — this is a negotiated schedule in the buyout agreement, not an afterthought.',
   noteMechanics:
-    'The seller note amortizes monthly over the full term with the remaining balance due as a balloon at the takeout year. If the balloon year reaches the term, the note self-amortizes and no balloon is due.',
+    'Payments are sized as if the loan ran the full schedule, but the remaining balance is paid off at the buyout year via the co-op\'s bank refinance. If the buyout year reaches the schedule length, the loan simply pays itself off.',
   refinanceBurden:
-    'Phase 2 Refinance = balloon balance owed to the seller + full return of investor capital. The co-op refinances both on a 30-year commercial mortgage; the preferred-return line disappears because investors have been taken out.',
+    'What the co-op\'s bank loan must cover at buyout: the seller\'s remaining balance, the investors\' capital, and any accrued (unpaid) preferred return. The co-op\'s ability to qualify for this mortgage is the deal\'s most important risk.',
   vacancyGrossUp:
-    'Required rents are grossed up for vacancy/collection loss: ÷ (1 − vacancy), so occupied units carry the full revenue requirement.',
+    'Required rents are grossed up for empty units and unpaid rent: ÷ (1 − vacancy), so occupied units carry the full requirement.',
   requiredRent:
-    'This is a COST-RECOVERY rent, not a market rent: debt service + full operating costs (taxes, insurance, management, repairs & maintenance, owner-paid utilities, replacement reserves) + the investor preferred return, grossed up for vacancy. If it sits below market comps, the structure has affordability headroom.',
+    'This is the rent needed to cover actual costs — loan payments, taxes, insurance, management, repairs, owner-paid utilities, replacement savings, and the investor return — not a market estimate. If it sits below market comps ($900–1,100 here), the gap is the deal\'s affordability margin.',
   municipalTax:
-    'Ohio municipal income tax (ORC 718) reaches qualifying wages and business net profits only — never interest, dividends, or capital gains. It therefore never touches the seller\'s note income, and it only touches investors when rental income is positive after depreciation.',
+    'Yellow Springs charges 1.5%, but Ohio law bars cities from taxing interest or capital gains — so it never touches the seller\'s loan income, only positive rental profits (which large depreciation zeroes out in most years).',
+  ohioBID:
+    'Ohio\'s Business Income Deduction: the first $250k/yr of business income is state-tax-free, 3% flat above. Treating the note income and rental profits as business income cuts the seller\'s Ohio tax roughly in half — but the characterization needs your CPA\'s sign-off, which is why this is a toggle.',
+  pikPref:
+    'ON: investors are paid their return each year from rents. OFF: the return accrues and is paid at the buyout instead — Phase-1 rents drop by the pref amount, and the buyout loan grows by the accrued total. Same investor economics, shifted in time; this is the tenant-affordability relief valve.',
+  escalators:
+    'Operating costs inflate: water/sewer 8%/yr (village ordinance through 2027, PFAS pressure after), insurance 8%/yr, property taxes and management 3%/yr, other lines 2.5%/yr. Phase-2 rent is computed on buyout-year costs — flat-cost models understate it badly.',
+  maxDonation:
+    'The largest land gift the seller can fully deduct within the six-year window at the current settings, holding everything else fixed. Larger gifts strand deduction (it expires); the appraisal, not this number, determines what the gift is actually worth.',
+  basisFork:
+    'What the seller "paid" per the IRS. $475k assumes the 1993 transfer was a purchase or inheritance (stepped-up). If it was a GIFT, the original 1968 cost carries over — roughly $250k. The real figure is on the seller\'s Form 4562 / Schedule E: get the return, stop estimating. Either way the lifetime tax barely moves (~$3k) because the building is fully depreciated.',
 } as const;
 
 export const METHODOLOGY: string[] = [
-  'Structure: the seller donates the land to a Community Land Trust (§ 170) and sells the improvements to the co-op syndicate on an installment note (§ 453). Contract price = FMV − donated land; basis is apportioned pro-rata between gift and sale parts (§ 1011(b) principle); accumulated depreciation is clamped at the building share of basis (75%), since land never depreciates and basis cannot go below zero.',
-  'Seller gain: no § 453(i) acceleration applies to straight-line residential real property. Each year\'s collected principal × Gross Profit Ratio is recognized as gain, 25%-rate unrecaptured § 1250 dollars first (Reg. § 1.453-12), then LTCG at 15%/20% by an automatic ≈$550k taxable-income breakpoint. NIIT (3.8%) applies automatically when MAGI exceeds $250k. Ohio taxes the full amount at the flat state rate with no charitable offset; Ohio municipalities cannot tax interest or gains (ORC 718), so the local rate does not touch the seller.',
-  'Charitable shield: FMV deduction limited to 30% of AGI per year, contribution year + 5 carryforward years (6 usable years; Year 7 is the first zero-shield year). Applied mechanically against ordinary income first, then the 25% bucket, then 20/15% gain. Unused carryforward after Year 6 expires and is surfaced as a utilization warning.',
-  'Investor: depreciable base = contract price (improvements only) + new CapEx. § 168(k)/OBBBA 100% bonus on the 5-yr and 15-yr classes, including a 30% cost-seg reclass of acquired improvements; the 27.5-yr shell is straight-line (full-year convention, simplified). Without REPS, losses suspend and release at the takeout (§ 469(g)); with REPS they offset W-2 annually. Ohio state effect models the 5/6 bonus addback recovered over five years; municipal tax hits only positive rental net profits. Exit: takeout price − depreciated basis is taxed 25% up to depreciation taken, 15% above; IRR/equity multiple/payback are computed on post-tax flows.',
-  'Rent: required rent is cost-recovery — Phase 1 = seller-note debt service + property taxes + insurance + management + repairs & maintenance + owner-paid utilities + replacement reserves + investor preferred return, ÷ units ÷ 12 ÷ (1 − vacancy). Phase 2 swaps in the 30-yr refinance payment (balloon + investor take-out), inflates management 15%, and drops the preferred return. Property taxes/insurance held flat across phases (no inflation modeling).',
-  'Simplifications a CPA should re-underwrite: flat marginal rates (no full bracket ladder); mid-month/mid-year MACRS conventions ignored; § 461(l) excess-business-loss cap, § 453A interest charge (>$5M notes), imputed-interest floors (§ 1274, note rate must be ≥ AFR), Ohio 1/6 addback recovery beyond exit, and investor NIIT are noted but not modeled. Illustrative only — not tax or investment advice.',
+  'Structure: the seller donates the 3.58-acre land parcel to a Community Land Trust (§ 170) and sells the improvements to the co-op syndicate on an installment note (§ 453). Contract price = FMV − donated land. Basis splits at the asset level: land basis follows the gift; the building\'s adjusted basis (depreciation clamped at the 75% building share of basis) offsets the sale. Exit at the buyout year is a fixed-formula purchase option in the CLT ground lease — unreturned capital + accrued unpaid preferred + balloon payoff; no appreciation participation.',
+  'Seller tax: recognized gain = collected principal × gross profit ratio, 25%-rate unrecaptured § 1250 dollars first (Reg. § 1.453-12), then 15%/20% LTCG split at the 2026 filing-status breakpoint ($613,700 MFJ / $533,400 single). NIIT (3.8%) applies over $250k/$200k MAGI automatically. § 170: 30%-of-AGI annual limit, 0.5%-of-AGI OBBBA floor (disallowed amounts never carry), six usable years. Ohio: flat rate, no charitable deduction; with the CPA-confirmed toggle, the Business Income Deduction exempts the first $250k/yr and taxes the rest at 3%. Municipal tax cannot reach interest or gains (ORC 718).',
+  'Investor: depreciable base = contract price + new CapEx; 100% bonus (§ 168(k)/OBBBA) on the 5/15-yr classes including a 25% cost-seg reclass; 27.5-yr straight line on the shell (full-year convention). REPS losses offset W-2 annually with a § 199A 20% deduction on positive years; passive losses suspend and release at the takeout (§ 469(g)). Exit tax: gain up to short-life depreciation × the negotiated exit-allocation % is ordinary income; the next tranche to total depreciation is 25%; the rest 15%; plus flat state on the gain. Ohio during the hold: BID zeroes profit-year state tax; without BID the 5/6 bonus addback applies. IRR/equity multiple/payback are post-tax.',
+  'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate annually (water/insurance 8%, taxes/management 3%, others 2.5%); Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, 30-yr amortization). The rent-cliff alert compares Phase 2 to Phase 1 on that basis.',
+  'Defaults (July 2026 re-underwrite): FMV $1.25M as-is (in-place $700 rents, deferred maintenance, ~7% Class-C village cap; $1.5M is the stabilized number). Land donation $430k = the largest gift fully absorbed inside the § 170 window at these settings (30% of FMV absorbs with slack; 40% strands deduction). Basis $475k stepped-up story — confirm from the seller\'s Form 4562; a gift transfer means ~$250k carryover instead.',
+  'Simplifications a CPA should re-underwrite: flat marginal rates; full-year MACRS conventions (no placed-in-service timing per bucket); buyout assumed at year-end; investor NIIT ignored (REPS exempts; passive years net to zero); Ohio 1/6 addback recovery truncated at exit; single investor pool, no promote; § 461(l), § 453A pledge rule, month-of-closing AFR, qualified appraisal / Form 8283, and no contractual linkage between donation and sale are diligence items, not model features. Illustrative only — not tax, legal, or investment advice.',
 ];
+
+// ----------------------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------------------
+
+const escalate = (base: number, rate: number, year: number) =>
+  base * Math.pow(1 + rate, year - 1);
+
+function opexAt(inputs: DealInputs, year: number): OpexBreakdown {
+  const E = ESCALATORS;
+  const b = {
+    propertyTaxes: escalate(inputs.propertyTaxes, E.PROPERTY_TAX, year),
+    insurance: escalate(inputs.annualInsuranceMisc, E.INSURANCE, year),
+    mgmt: escalate(inputs.mgmtFeePerDoor * inputs.units * 12, E.MANAGEMENT, year),
+    repairsMaint: escalate(inputs.repairsMaintPerUnit * inputs.units, E.GENERAL, year),
+    utilities: escalate(inputs.utilitiesPerUnit * inputs.units, E.UTILITIES, year),
+    reserves: escalate(inputs.reservesPerUnit * inputs.units, E.GENERAL, year),
+  };
+  return { ...b, total: b.propertyTaxes + b.insurance + b.mgmt + b.repairsMaint + b.utilities + b.reserves };
+}
+
+// Seller state tax on note income for one year. Business-income treatment
+// (BID) covers both the installment gain and the note interest — flagged
+// CPA-confirm in the UI.
+function sellerStateTax(inputs: DealInputs, nii: number): number {
+  if (inputs.ohioBIDConfirmed) {
+    return JURISDICTION.OHIO_BID_RATE * Math.max(0, nii - JURISDICTION.OHIO_BID_CAP);
+  }
+  return (inputs.stateTaxRate / 100) * nii;
+}
 
 // ----------------------------------------------------------------------------
 // Engine
 // ----------------------------------------------------------------------------
 
 export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
-  const C = CONSTANTS;
+  const T = TAX_POLICY;
+  const D = DEAL_CONSTANTS;
   const ordRate = inputs.sellerOrdinaryRate / 100;
-  const stateRate = inputs.stateTaxRate / 100;
-  const localRate = inputs.localTaxRate / 100;
   const disc = inputs.discountRate / 100;
+  const ltcgHigh = T.LTCG_HIGH_THRESHOLD[inputs.sellerFilingStatus];
+  const niitFloor = T.NIIT_MAGI_THRESHOLD[inputs.sellerFilingStatus];
 
-  // ---- Basis, bargain-sale allocation, gross profit ratio -------------------
-  const depreciableBasis = inputs.originalCostBasis * C.BUILDING_RATIO;
+  // ---- Asset-level basis split ----------------------------------------------
+  const depreciableBasis = inputs.originalCostBasis * D.BUILDING_RATIO;
   const clampedDepreciation = Math.min(inputs.accumulatedDepreciation, depreciableBasis);
   const depWasClamped = inputs.accumulatedDepreciation > clampedDepreciation;
   const totalAdjustedBasis = inputs.originalCostBasis - clampedDepreciation;
 
   const contractPrice = Math.max(0, inputs.totalFMV - inputs.cltLandDonation);
-  const donationShare = inputs.totalFMV > 0 ? inputs.cltLandDonation / inputs.totalFMV : 0;
-  const donatedBasisAllocated = totalAdjustedBasis * donationShare;
-  const soldAdjustedBasis = totalAdjustedBasis - donatedBasisAllocated;
+  const landBasis = inputs.originalCostBasis * (1 - D.BUILDING_RATIO);
+  const buildingAdjBasis = depreciableBasis - clampedDepreciation;
+  // The gift is the land parcel: its basis follows it. With no donation, the
+  // whole property is sold and land basis offsets the sale instead.
+  const donatedBasisAllocated = inputs.cltLandDonation > 0 ? landBasis : 0;
+  const soldAdjustedBasis = buildingAdjBasis + (inputs.cltLandDonation > 0 ? 0 : landBasis);
 
   const grossProfit = Math.max(0, contractPrice - soldAdjustedBasis);
   const grossProfitRatio = contractPrice > 0 ? grossProfit / contractPrice : 0;
@@ -384,13 +490,9 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
       ? 0
       : Math.max(0, remainingBalance(noteRate, noteMonths, financedPrincipal, inputs.balloonYear * 12));
 
-  // ---- Seller annual schedule ------------------------------------------------
-  // Marginal convention: taxes shown are the DEAL's incremental taxes vs. a
-  // no-deal baseline of sellerOtherIncome. The § 170 deduction may therefore
-  // produce negative deal-tax years (it shields other income too).
-  interface GainSplit { g25: number; g20: number; g15: number }
-  const splitLtcg = (ltcg: number, taxableProxy: number): { g20: number; g15: number } => {
-    const excess = Math.max(0, taxableProxy - C.LTCG_HIGH_THRESHOLD);
+  // ---- Seller annual schedule (marginal convention vs. no-deal baseline) -----
+  const splitLtcg = (ltcg: number, taxableProxy: number) => {
+    const excess = Math.max(0, taxableProxy - ltcgHigh);
     const g20 = Math.min(ltcg, excess);
     return { g20, g15: ltcg - g20 };
   };
@@ -398,10 +500,11 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const schedule: SellerYearRow[] = [];
   let unrecapRemaining = unrecap1250Total;
   let charityCarry = inputs.cltLandDonation;
-  let charityUsedTotal = 0;
+  let charityUsed = 0;
+  let charityFloorLost = 0;
   let cumulative = 0;
 
-  const scheduleYears = Math.max(lastNoteYear, charityCarry > 0 ? C.CHARITY_USABLE_YEARS : 0);
+  const scheduleYears = Math.max(lastNoteYear, charityCarry > 0 ? T.CHARITY_USABLE_YEARS : 0);
   for (let year = 1; year <= scheduleYears; year++) {
     const amort = amortSchedule[year - 1];
     const isBalloonYear = year === inputs.balloonYear && !balloonBeyondTerm;
@@ -416,15 +519,21 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     const ltcgBase = gain - g25base;
 
     const agi = inputs.sellerOtherIncome + interest + gain;
+
+    // § 170 draw with the OBBBA 0.5% floor: the floor portion of what is
+    // claimed each year is disallowed and does not return to the carryforward.
     let deduction = 0;
-    if (year <= C.CHARITY_USABLE_YEARS && charityCarry > 0) {
-      deduction = Math.min(charityCarry, C.CHARITY_AGI_LIMIT * agi);
-      charityCarry -= deduction;
-      charityUsedTotal += deduction;
+    if (year <= T.CHARITY_USABLE_YEARS && charityCarry > 0) {
+      const draw = Math.min(charityCarry, T.CHARITY_AGI_LIMIT * agi);
+      charityCarry -= draw;
+      const floorLoss = Math.min(draw, T.CHARITY_FLOOR_AGI * agi);
+      deduction = draw - floorLoss;
+      charityUsed += deduction;
+      charityFloorLost += floorLoss;
     }
 
-    // Mechanical ordering: deduction absorbs ordinary income first (interest +
-    // other income), then the 25% bucket, then 20%, then 15%.
+    // Mechanical ordering: deduction absorbs ordinary income first, then the
+    // 25% bucket, then 20%, then 15%.
     const ordinaryIncome = inputs.sellerOtherIncome + interest;
     const dedOrd = Math.min(deduction, ordinaryIncome);
     let dedLeft = deduction - dedOrd;
@@ -436,22 +545,16 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     dedLeft -= ded20;
     const ded15 = Math.min(dedLeft, g15);
 
-    // Incremental federal tax vs. baseline (other income at ordinary rate).
-    // dedOrd beyond interest shields other income, so this may go negative.
-    const fedOrdinaryTax = (interest - dedOrd) * ordRate;
+    const fedOrdinaryTax = (interest - dedOrd) * ordRate; // may go negative
     const fedGainTax =
-      (g25base - ded25) * C.UNRECAP_1250_RATE +
-      (g20 - ded20) * C.LTCG_RATE_HIGH +
-      (g15 - ded15) * C.LTCG_RATE_LOW;
+      (g25base - ded25) * T.UNRECAP_1250_RATE +
+      (g20 - ded20) * T.LTCG_RATE_HIGH +
+      (g15 - ded15) * T.LTCG_RATE_LOW;
     const federalTax = fedOrdinaryTax + fedGainTax;
 
-    // NIIT: MAGI is pre-itemized-deduction; NII = interest + gains.
     const nii = interest + gain;
-    const niitTax = C.NIIT_RATE * Math.min(nii, Math.max(0, agi - C.NIIT_MAGI_THRESHOLD));
-
-    // Ohio: flat rate on the deal's income; no charitable deduction at state
-    // level. Municipal: interest/gains are intangible income — never taxed.
-    const stateTax = stateRate * nii;
+    const niitTax = T.NIIT_RATE * Math.min(nii, Math.max(0, agi - niitFloor));
+    const stateTax = sellerStateTax(inputs, nii);
 
     const totalTax = federalTax + niitTax + stateTax;
     const grossCash = interest + principal;
@@ -499,11 +602,12 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     isTaxExceedsDP: year1 ? year1.totalTax > downPayment : false,
     charitable: {
       total: inputs.cltLandDonation,
-      used: charityUsedTotal,
-      unused: inputs.cltLandDonation - charityUsedTotal,
+      used: charityUsed,
+      floorLost: charityFloorLost,
+      expired: charityCarry,
       utilizationPct:
-        inputs.cltLandDonation > 0 ? (charityUsedTotal / inputs.cltLandDonation) * 100 : 100,
-      firstZeroShieldYear: C.CHARITY_USABLE_YEARS + 1,
+        inputs.cltLandDonation > 0 ? (charityUsed / inputs.cltLandDonation) * 100 : 100,
+      firstZeroShieldYear: T.CHARITY_USABLE_YEARS + 1,
     },
     comparison: buildSellerComparison(inputs, {
       totalAdjustedBasis,
@@ -514,63 +618,54 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
       installmentTaxTotal: schedule.reduce((a, r) => a + r.totalTax, 0),
       disc,
       ordRate,
-      stateRate,
+      ltcgHigh,
+      niitFloor,
     }),
   };
 
-  // ---- Tenant / rent requirement ----------------------------------------------
-  const perUnitOpex =
-    inputs.repairsMaintPerUnit + inputs.utilitiesPerUnit + inputs.reservesPerUnit;
-  const mgmtAnnual = inputs.mgmtFeePerDoor * inputs.units * 12;
-  const opexBreakdown = {
-    propertyTaxes: inputs.propertyTaxes,
-    insurance: inputs.annualInsuranceMisc,
-    mgmt: mgmtAnnual,
-    repairsMaint: inputs.repairsMaintPerUnit * inputs.units,
-    utilities: inputs.utilitiesPerUnit * inputs.units,
-    reserves: inputs.reservesPerUnit * inputs.units,
-  };
-  const opexAnnual =
-    inputs.propertyTaxes + inputs.annualInsuranceMisc + mgmtAnnual + perUnitOpex * inputs.units;
+  // ---- Tenant / rent requirement (escalated opex) -----------------------------
+  const opexYear1 = opexAt(inputs, 1);
+  const opexBuyoutYear = opexAt(inputs, inputs.balloonYear + 1);
 
   const totalNewCapex = inputs.capexRoofStruct + inputs.capexParkingLand + inputs.capexAppliances;
   const capitalRequired = downPayment + totalNewCapex;
   const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
+  const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
+  const accruedPrefAtExit = inputs.prefCurrentPay ? 0 : prefAnnual * lastNoteYear;
 
   const phase1AnnualDebtService = monthlyPmt * 12;
-  const phase1AnnualRevenueReq = phase1AnnualDebtService + opexAnnual + prefAnnual;
+  const phase1AnnualRevenueReq = phase1AnnualDebtService + opexYear1.total + prefInRent;
   const occupancy = 1 - inputs.vacancyRate / 100;
   const phase1MonthlyRent = phase1AnnualRevenueReq / inputs.units / 12 / occupancy;
 
-  const phase2RefinanceBurden = balloonBalance + capitalRequired;
+  const phase2RefinanceBurden = balloonBalance + capitalRequired + accruedPrefAtExit;
   const refiRate = inputs.phase2CommercialRate / 100;
   const monthlyP2 =
-    phase2RefinanceBurden > 0 ? pmt(refiRate, C.REFI_AMORT_YEARS * 12, phase2RefinanceBurden) : 0;
+    phase2RefinanceBurden > 0 ? pmt(refiRate, D.REFI_AMORT_YEARS * 12, phase2RefinanceBurden) : 0;
   const phase2AnnualDebtService = monthlyP2 * 12;
-  const phase2MgmtAnnual = mgmtAnnual * C.MGMT_INFLATION_P2;
-  const phase2AnnualRevenueReq =
-    phase2AnnualDebtService + (opexAnnual - mgmtAnnual + phase2MgmtAnnual);
+  const phase2AnnualRevenueReq = phase2AnnualDebtService + opexBuyoutYear.total;
   const phase2MonthlyRent = phase2AnnualRevenueReq / inputs.units / 12 / occupancy;
   const rentJumpPct =
     phase1MonthlyRent > 0 ? ((phase2MonthlyRent - phase1MonthlyRent) / phase1MonthlyRent) * 100 : 0;
 
   const tenant: TenantMetrics = {
-    opexAnnual,
-    opexBreakdown,
+    opexYear1,
+    opexBuyoutYear,
     prefAnnual,
+    prefInRent,
     phase1AnnualDebtService,
     phase1AnnualRevenueReq,
     phase1MonthlyRent,
     rentDelta: phase1MonthlyRent - inputs.currentRent,
     balloonBalance,
     balloonBeyondTerm,
+    accruedPrefAtExit,
     phase2RefinanceBurden,
     phase2AnnualDebtService,
-    phase2MgmtAnnual,
     phase2AnnualRevenueReq,
     phase2MonthlyRent,
     rentJumpPct,
-    isRentCliff: rentJumpPct > C.RENT_CLIFF_THRESHOLD_PCT,
+    isRentCliff: rentJumpPct > D.RENT_CLIFF_THRESHOLD_PCT,
   };
 
   // ---- Investor ---------------------------------------------------------------
@@ -579,19 +674,17 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     capitalRequired,
     totalNewCapex,
     prefAnnual,
+    accruedPrefAtExit,
     amortSchedule,
     balloonBalance,
-    balloonBeyondTerm,
     lastNoteYear,
-    localRate,
-    stateRate,
   });
 
   return { inputs, seller, investor, tenant, amortSchedule };
 }
 
 // ----------------------------------------------------------------------------
-// Seller scenario comparison (vs. cash sale)
+// Seller scenario comparison
 // ----------------------------------------------------------------------------
 
 interface ComparisonCtx {
@@ -603,24 +696,23 @@ interface ComparisonCtx {
   installmentTaxTotal: number;
   disc: number;
   ordRate: number;
-  stateRate: number;
+  ltcgHigh: number;
+  niitFloor: number;
 }
 
 function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMetrics['comparison'] {
-  const C = CONSTANTS;
+  const T = TAX_POLICY;
 
-  // Tax on a fully-recognized gain in a single year, marginal to other income.
   const lumpGainTax = (gain: number, unrecapCap: number, deduction: number): number => {
     const g25base = Math.min(gain, unrecapCap);
     const ltcgBase = gain - g25base;
     const agi = inputs.sellerOtherIncome + gain;
-    const ordinaryIncome = inputs.sellerOtherIncome;
-    const dedOrd = Math.min(deduction, ordinaryIncome);
+    const dedOrd = Math.min(deduction, inputs.sellerOtherIncome);
     let dedLeft = deduction - dedOrd;
     const ded25 = Math.min(dedLeft, g25base);
     dedLeft -= ded25;
     const taxableProxy = Math.max(0, agi - deduction);
-    const excess = Math.max(0, taxableProxy - C.LTCG_HIGH_THRESHOLD);
+    const excess = Math.max(0, taxableProxy - ctx.ltcgHigh);
     const g20 = Math.min(ltcgBase, excess);
     const g15 = ltcgBase - g20;
     const ded20 = Math.min(dedLeft, g20);
@@ -628,39 +720,45 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
     const ded15 = Math.min(dedLeft, g15);
     const fed =
       -dedOrd * ctx.ordRate +
-      (g25base - ded25) * C.UNRECAP_1250_RATE +
-      (g20 - ded20) * C.LTCG_RATE_HIGH +
-      (g15 - ded15) * C.LTCG_RATE_LOW;
-    const niit = C.NIIT_RATE * Math.min(gain, Math.max(0, agi - C.NIIT_MAGI_THRESHOLD));
-    const state = ctx.stateRate * gain;
+      (g25base - ded25) * T.UNRECAP_1250_RATE +
+      (g20 - ded20) * T.LTCG_RATE_HIGH +
+      (g15 - ded15) * T.LTCG_RATE_LOW;
+    const niit = T.NIIT_RATE * Math.min(gain, Math.max(0, agi - ctx.niitFloor));
+    const state = sellerStateTax(inputs, gain);
     return fed + niit + state;
   };
 
-  // Scenario 1: straight cash sale of the whole property at FMV, no donation.
+  // § 170 draw with floor, for the lump-sum scenarios.
+  const drawWithFloor = (carry: number, agi: number): { draw: number; deduction: number } => {
+    const draw = Math.min(carry, T.CHARITY_AGI_LIMIT * agi);
+    const deduction = Math.max(0, draw - T.CHARITY_FLOOR_AGI * agi);
+    return { draw, deduction };
+  };
+
+  // Scenario 1: straight cash sale at FMV, no donation.
   const cashGain = Math.max(0, inputs.totalFMV - ctx.totalAdjustedBasis);
   const cashTax = lumpGainTax(cashGain, Math.min(ctx.clampedDepreciation, cashGain), 0);
   const straightCash: SellerScenario = {
     label: 'Straight cash sale',
     nominalAfterTax: inputs.totalFMV - cashTax,
-    npvAfterTax: inputs.totalFMV - cashTax, // all at t=0
+    npvAfterTax: inputs.totalFMV - cashTax,
     totalTax: cashTax,
   };
 
-  // Scenario 2: donate land, sell improvements for CASH in year 1; the § 170
-  // carryforward then runs against other income in years 2–6.
+  // Scenario 2: donate land, sell improvements for cash in year 1.
   const bifGain = Math.max(0, ctx.contractPrice - ctx.soldAdjustedBasis);
   const unrecapCap = Math.min(ctx.clampedDepreciation, bifGain);
   const agiY1 = inputs.sellerOtherIncome + bifGain;
-  const dedY1 = Math.min(inputs.cltLandDonation, C.CHARITY_AGI_LIMIT * agiY1);
-  const bifTaxY1 = lumpGainTax(bifGain, unrecapCap, dedY1);
-  let carry = inputs.cltLandDonation - dedY1;
+  const y1 = drawWithFloor(inputs.cltLandDonation, agiY1);
+  const bifTaxY1 = lumpGainTax(bifGain, unrecapCap, y1.deduction);
+  let carry = inputs.cltLandDonation - y1.draw;
   let bifNominal = ctx.contractPrice - bifTaxY1;
   let bifNpv = ctx.contractPrice - bifTaxY1;
   let bifTaxTotal = bifTaxY1;
-  for (let year = 2; year <= C.CHARITY_USABLE_YEARS && carry > 0; year++) {
-    const ded = Math.min(carry, C.CHARITY_AGI_LIMIT * inputs.sellerOtherIncome);
-    carry -= ded;
-    const benefit = ded * ctx.ordRate; // shields other ordinary income (federal only)
+  for (let year = 2; year <= T.CHARITY_USABLE_YEARS && carry > 0; year++) {
+    const d = drawWithFloor(carry, inputs.sellerOtherIncome);
+    carry -= d.draw;
+    const benefit = d.deduction * ctx.ordRate;
     bifNominal += benefit;
     bifNpv += benefit / Math.pow(1 + ctx.disc, year - 1);
     bifTaxTotal -= benefit;
@@ -672,7 +770,6 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
     totalTax: bifTaxTotal,
   };
 
-  // Scenario 3: the structure (installment + donation) from the schedule.
   const instNominal = ctx.installmentFlows.reduce((a, b) => a + b, 0);
   const instNpv = ctx.installmentFlows.reduce(
     (acc, cf, i) => acc + cf / Math.pow(1 + ctx.disc, i + 1),
@@ -703,23 +800,25 @@ interface InvestorCtx {
   capitalRequired: number;
   totalNewCapex: number;
   prefAnnual: number;
+  accruedPrefAtExit: number;
   amortSchedule: AmortRow[];
   balloonBalance: number;
-  balloonBeyondTerm: boolean;
   lastNoteYear: number;
-  localRate: number;
-  stateRate: number;
 }
 
 function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMetrics {
-  const C = CONSTANTS;
+  const T = TAX_POLICY;
+  const D = DEAL_CONSTANTS;
+  const J = JURISDICTION;
   const invRate = inputs.investorMarginalRate / 100;
+  const stateRate = inputs.stateTaxRate / 100;
+  const localRate = inputs.localTaxRate / 100;
   const exitYear = ctx.lastNoteYear;
+  const exitAllocPct = inputs.exitShortLifeAllocationPct / 100;
 
-  // Depreciable base: buyers acquire the improvements only (land → CLT).
-  const costSegBonus = ctx.contractPrice * C.COST_SEG_SHORT_LIFE_PCT;
-  const shell27 = ctx.contractPrice * (1 - C.COST_SEG_SHORT_LIFE_PCT);
-  const annualSL = shell27 / C.RESIDENTIAL_LIFE + inputs.capexRoofStruct / C.RESIDENTIAL_LIFE;
+  const costSegBonus = ctx.contractPrice * D.COST_SEG_SHORT_LIFE_PCT;
+  const shell27 = ctx.contractPrice * (1 - D.COST_SEG_SHORT_LIFE_PCT);
+  const annualSL = shell27 / T.RESIDENTIAL_LIFE + inputs.capexRoofStruct / T.RESIDENTIAL_LIFE;
   const year1Bonus = {
     costSeg: costSegBonus,
     parkingLand: inputs.capexParkingLand,
@@ -732,48 +831,60 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
     depByYear.push(y === 1 ? year1Bonus.total + annualSL : annualSL);
   }
   const totalDepTaken = depByYear.reduce((a, b) => a + b, 0);
+  const shortLifeDepTaken = year1Bonus.total; // all short-life dep is Y1 bonus
 
-  // Exit: co-op buys the entity out at balloon + capital return.
+  // Exit: formula price for the property = balloon payoff + capital return.
+  // Accrued pref (PIK) is paid alongside, funded by the same refinance, but is
+  // ordinary income to investors, not sale proceeds.
   const salePrice = ctx.balloonBalance + ctx.capitalRequired;
   const purchaseBasisTotal = ctx.contractPrice + ctx.totalNewCapex;
   const adjustedBasisAtExit = purchaseBasisTotal - totalDepTaken;
   const exitGain = Math.max(0, salePrice - adjustedBasisAtExit);
-  const exitRecapture = Math.min(exitGain, totalDepTaken);
+  // § 1245 tranche per the negotiated exit allocation; then 25% up to the
+  // rest of depreciation taken; then 15%. Flat state on the whole gain
+  // (per-investor BID may reduce this — diligence item, not modeled).
+  const exitOrdinary = Math.min(exitGain, shortLifeDepTaken * exitAllocPct);
+  const exit25 = Math.min(exitGain - exitOrdinary, Math.max(0, totalDepTaken - exitOrdinary));
+  const exit15 = exitGain - exitOrdinary - exit25;
   const exitTax =
-    exitRecapture * C.UNRECAP_1250_RATE +
-    (exitGain - exitRecapture) * C.LTCG_RATE_LOW +
-    exitGain * ctx.stateRate;
+    exitOrdinary * invRate + exit25 * T.UNRECAP_1250_RATE + exit15 * T.LTCG_RATE_LOW +
+    exitGain * stateRate;
 
-  // Build the annual flow model for a given REPS assumption.
   const buildFlows = (hasReps: boolean) => {
     const rows: InvestorYearRow[] = [];
     const flows: number[] = [-ctx.capitalRequired];
     let suspended = 0;
-    let ohioDeferred = 0; // 5/6 addback recovered 1/5 per following year (REPS mode)
+    let ohioDeferred = 0;
     let cumulative = -ctx.capitalRequired;
 
     for (let y = 1; y <= exitYear; y++) {
       const amort = ctx.amortSchedule[y - 1];
       const principal = amort ? amort.principalPaid : 0;
       const dep = depByYear[y - 1];
-      const taxable = ctx.prefAnnual + principal - dep;
+      const prefReceived = inputs.prefCurrentPay ? ctx.prefAnnual : 0;
+      // Cash-basis: PIK pref is not income until paid (at exit).
+      const taxable = prefReceived + principal - dep;
 
       let federalTaxCash = 0;
       let stateTaxCash = 0;
       if (hasReps) {
-        federalTaxCash = -taxable * invRate; // loss → savings (+), profit → tax (−)
-        // Ohio: add back 5/6 of year-1 bonus, recover 1/5 of it per year after.
-        let ohioTaxable = taxable;
-        if (y === 1) {
-          const addback = year1Bonus.total * C.OHIO_BONUS_ADDBACK;
-          ohioTaxable += addback;
-          ohioDeferred = addback;
-        } else if (ohioDeferred > 0) {
-          ohioTaxable -= ohioDeferred / 5;
+        // § 199A: 20% QBI deduction on positive rental income years.
+        federalTaxCash =
+          taxable > 0 ? -taxable * (1 - T.QBI_DEDUCTION) * invRate : -taxable * invRate;
+        if (inputs.ohioBIDConfirmed) {
+          stateTaxCash = 0; // profit years sit inside the $250k BID cap
+        } else {
+          let ohioTaxable = taxable;
+          if (y === 1) {
+            const addback = year1Bonus.total * J.OHIO_BONUS_ADDBACK;
+            ohioTaxable += addback;
+            ohioDeferred = addback;
+          } else if (ohioDeferred > 0) {
+            ohioTaxable -= ohioDeferred / 5;
+          }
+          stateTaxCash = -ohioTaxable * stateRate;
         }
-        stateTaxCash = -ohioTaxable * ctx.stateRate;
       } else {
-        // § 469: losses suspend; profits absorb carryforward first.
         if (taxable < 0) {
           suspended += -taxable;
         } else {
@@ -781,28 +892,31 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
           suspended -= offset;
           const net = taxable - offset;
           federalTaxCash = -net * invRate;
-          stateTaxCash = -net * ctx.stateRate;
+          stateTaxCash = inputs.ohioBIDConfirmed ? 0 : -net * stateRate;
         }
       }
-      const localTax = Math.max(0, taxable) * ctx.localRate;
+      const localTax = Math.max(0, taxable) * localRate;
 
       let exitProceeds = 0;
       const isExitYear = y === exitYear;
       if (isExitYear) {
         exitProceeds = ctx.capitalRequired - exitTax;
+        if (ctx.accruedPrefAtExit > 0) {
+          exitProceeds += ctx.accruedPrefAtExit * (1 - invRate); // ordinary when paid
+        }
         if (!hasReps && suspended > 0) {
-          exitProceeds += suspended * invRate; // § 469(g) release at full disposition
+          exitProceeds += suspended * invRate; // § 469(g) release
           suspended = 0;
         }
       }
 
-      const netCashFlow = ctx.prefAnnual + federalTaxCash + stateTaxCash - localTax + exitProceeds;
+      const netCashFlow = prefReceived + federalTaxCash + stateTaxCash - localTax + exitProceeds;
       cumulative += netCashFlow;
       flows.push(netCashFlow);
       rows.push({
         year: y,
         capitalInjected: y === 1 ? ctx.capitalRequired : 0,
-        operatingCashFlow: ctx.prefAnnual,
+        operatingCashFlow: prefReceived,
         depreciation: dep,
         taxableRentalIncome: taxable,
         federalTaxCash,
@@ -841,10 +955,10 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
 
   const pct = (x: number | null) => (x == null ? 'n/a' : (x * 100).toFixed(1) + '%');
   const optimalWhen = [
-    `Investors with REPS (§ 469(c)(7)) or offsetting passive income: ${pct(irrWithReps)} IRR — Year-1 bonus depreciation returns ~${Math.round(((year1Bonus.total + annualSL) * invRate / Math.max(1, ctx.capitalRequired)) * 100)}% of capital as first-year tax savings.`,
+    `Investors with REPS (§ 469(c)(7)) or offsetting passive income: ${pct(irrWithReps)} IRR — Year-1 bonus depreciation returns ~${Math.round(((year1Bonus.total + annualSL) * invRate / Math.max(1, ctx.capitalRequired)) * 100)}% of capital as first-year tax savings, with § 199A trimming tax on later profit years.`,
     `Purely passive high-W-2 investors: ${pct(irrWithoutReps)} IRR — losses suspend under § 469 and release only at the Year-${exitYear} takeout.`,
-    `The return is tax-driven and takeout-dependent: capital is returned at par in Year ${exitYear} via the co-op refinance, so underwrite the co-op's ability to qualify for the Phase 2 mortgage, not property appreciation.`,
-    `Exit tax of ${Math.round(exitTax / 1000)}k reduces the takeout — bonus depreciation is a deferral, not an exemption.`,
+    `The return is tax-driven and takeout-dependent: capital ${inputs.prefCurrentPay ? '' : 'plus the accrued preferred '}comes back at the formula price in Year ${exitYear} via the co-op refinance — underwrite the co-op's Phase-2 mortgage qualification, not property appreciation (the ground-lease option forecloses it).`,
+    `Exit tax of ~$${Math.round(exitTax / 1000)}k reduces the takeout; the negotiated short-life allocation (currently ${inputs.exitShortLifeAllocationPct}%) is worth 1.5–2.5 IRR points — negotiate the buyout price allocation schedule.`,
   ];
 
   return {
@@ -852,14 +966,18 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
     purchaseBasis: ctx.contractPrice,
     year1Bonus,
     annualSL,
+    accruedPrefAtExit: ctx.accruedPrefAtExit,
     schedule: active.rows,
     exit: {
       year: exitYear,
       salePrice,
       adjustedBasisAtExit,
       gain: exitGain,
+      exitOrdinary,
+      exit25,
+      exit15,
       exitTax,
-      netToInvestors: ctx.capitalRequired - exitTax,
+      netToInvestors: ctx.capitalRequired - exitTax + ctx.accruedPrefAtExit * (1 - invRate),
     },
     irrWithReps,
     irrWithoutReps,
@@ -867,6 +985,29 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
     paybackYear,
     optimalWhen,
   };
+}
+
+// ----------------------------------------------------------------------------
+// § 170 donation optimizer
+// ----------------------------------------------------------------------------
+// Largest donation the seller fully absorbs (zero carryforward expiry) within
+// the six-year window, holding all other inputs fixed. Capped at 40% of FMV.
+// Monotone: bigger gifts both shrink the income that absorbs the deduction
+// and grow the deduction itself, so binary search is safe.
+
+export function findMaxAbsorbableDonation(inputs: DealInputs): number {
+  const cap = inputs.totalFMV * DEAL_CONSTANTS.MAX_DONATION_PCT_OF_FMV;
+  const fullyAbsorbed = (donation: number): boolean =>
+    calculateDealMetrics({ ...inputs, cltLandDonation: donation }).seller.charitable.expired < 1;
+  if (fullyAbsorbed(cap)) return Math.floor(cap / 1000) * 1000;
+  let lo = 0;
+  let hi = cap;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (fullyAbsorbed(mid)) lo = mid;
+    else hi = mid;
+  }
+  return Math.floor(lo / 1000) * 1000;
 }
 
 // Re-export for convenience in components/tests.

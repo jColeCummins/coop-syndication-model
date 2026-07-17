@@ -40,6 +40,7 @@ export function KPIStrip({ model }: { model: DealMetrics }) {
         title="Phase 2 Jump"
         value={`${model.tenant.rentJumpPct > 0 ? '+' : ''}${formatPercent(model.tenant.rentJumpPct)}`}
         valueClass={model.tenant.isRentCliff ? 'text-destructive' : 'text-emerald-500'}
+        subtitle={`over ${model.inputs.balloonYear} yrs of cost inflation`}
       />
     </div>
   );

@@ -121,3 +121,37 @@ $339k in (=$159k down payment + $180k CapEx), five-year hold, taken out at par b
 ## 5. Remaining simplifications a reviewing CPA should re-underwrite
 
 Flat marginal rates rather than full bracket ladders; full-year (not mid-month/mid-quarter) MACRS conventions; property taxes/insurance held flat across phases (no inflation); investor NIIT ignored; Ohio 1/6 addback recovery truncated at exit; single-entity investor pool with no promote/waterfall; no appraisal or § 170(f) substantiation modeling for the CLT donation (a qualified appraisal and Form 8283 are mandatory at this size, and a CLT ground-lease donation should get a § 170 opinion); no § 453A test needed (< $5M). The engine's every rate and threshold is a named constant in `src/utils/calculations.ts` for easy re-parameterization.
+
+---
+
+# V5.2 Addendum — July 2026 re-underwrite
+
+Implements the accepted subset of `docs/REVIEW-2026-07.md`, `docs/defaults-v5.1.patch.ts`, and `docs/UX-CONFIG-SPEC-v5.2.md`, triaged to capture the benefit without drowning the tool in configuration surface.
+
+## A.1 Complexity triage
+
+**Implemented** (engine changes 1–8 from the patch file): asset-level basis split (land basis → CLT gift, building adjusted basis → co-op sale; GPR is now ~100% on a fully-depreciated building); OBBBA 0.5%-of-AGI charitable floor (disallowed amounts never carry); § 1245 ordinary-rate exit recapture behind a negotiated `exitShortLifeAllocationPct` input (default 50%); Ohio Business Income Deduction behind a CPA-confirm toggle (default on); § 199A QBI on positive REPS years; per-line opex escalators (water/insurance 8%, taxes/management 3%, others 2.5%) with Phase-2 rent and the cliff alert computed on buyout-year costs; PIK-pref toggle; filing-status-driven NIIT/LTCG thresholds (2026 figures); cost-seg share cut to 25%; management ×1.15 bump replaced by the 3%/yr escalator; plain-language labels + tooltips on every input.
+
+**Deferred** (recorded, low regret): the 4-layer JSON preset architecture (constants are now grouped `TAX_POLICY` / `JURISDICTION` / `ESCALATORS` / `DEAL_CONSTANTS` as the seam for it); `capexPlacedInServiceYear` per bucket and buyout month/year (timing shifts ~$18k of Year-1 tax savings — flag for the CPA, not the slider deck); CPI indexation of investor capital (decision: off); transfer-type selector (the basis fork lives in the tooltip; the real answer is the seller's Form 4562); escalator sliders (constants, documented). Structural decisions honored, not relitigated: formula-option exit in the ground lease; no Rev. Rul. 82-197 exit deduction.
+
+## A.2 FMV: $1.5M was a stabilized number — as-is is ~$1.25M
+
+At 25 units × $700 in-place rents (4% vacancy) and honest Yellow Springs operating costs, EGI ≈ $202k and opex ≈ $126k ex-reserves, so NOI ≈ $75k. Ohio Class-C multifamily in tertiary markets trades at 7–9% cap rates in 2026; even granting a village premium (~6.75–7.25%), income supports only ~$1.0–1.15M. Sales comps (~$50k/door for C-class garden with deferred maintenance, plus the standalone house and the well-located 3.58-acre site) support $1.2–1.35M. Reconciled **as-is default: $1,250,000** ($50k/door). The prior $1.5M is what the property is worth *after* renovation at market rents ($900–1,100) — a defensible exit appraisal, not a defensible acquisition price. Sources: Ohio Dept. of Taxation 2026 multifamily cap-rate publication; 2026 Class-C tertiary-market cap-rate surveys (7–9%).
+
+## A.3 Donation sizing: the optimizer answers "redeem it before it expires"
+
+Sweeping the land gift at the new defaults (engine-verified, binary search capped at 40% of FMV):
+
+| Gift | % of FMV | Deducted | Lost to 0.5% floor | Expires unused |
+|---|---|---|---|---|
+| $375,000 | 30.0% | $367.7k | $7.3k | $0 |
+| **$430,000 (default)** | **34.4%** | **$422.7k** | **$7.3k** | **$0** |
+| **$436,000 (maximum)** | **34.9%** | — | — | **$0** |
+| $450,000 | 36.0% | $424.7k | $7.2k | $18.1k |
+| $500,000 | 40.0% | $406.4k | $6.9k | $86.7k |
+
+**The largest fully-redeemed gift is $436k (34.9% of FMV).** The default is $430k — inside the optimum with margin for appraisal drift. 30% ($375k) absorbs with slack; 40% strands $87k of deduction. The binding constraint is the 30%-of-AGI ceiling: absorption capacity is itself a function of the gift (a bigger gift shrinks the note that generates the income that absorbs the deduction), which is why the answer is 34.9% and not a round number. The Year-5 balloon inside the six-year window remains the engine of full absorption — stretch the buyout past Year 6 and utilization collapses. The dashboard now displays the live maximum for whatever inputs are set. The appraisal of the 3.58-acre parcel — not this optimizer — determines what the gift is actually worth; the optimizer tells you what the deal can *use*.
+
+## A.4 Headline numbers at V5.2 defaults
+
+Seller: contract price $820k, Year-1 tax $27.4k against a $123k down payment (headroom $95.6k), lifetime tax $133k with the BID on (vs $149k off), 98.3% of the gift deducted, nothing expires. Given the donation, the note beats a bifurcated cash sale by **$22.7k NPV / $170k nominal**; a straight cash sale (keeping the land) still nets more in pure dollars — the gift is philanthropy, priced honestly. Investor: **7.3% IRR with REPS** / 5.2% passive, 1.27x, capital + formula takeout in Year 5; exit tax $103k at the 50% short-life allocation (negotiating range $88k–$118k ⇒ ±1.1 IRR points vs the 8.4% floor-allocation case). Tenant: **Phase 1 $755** (+$55 vs current, $145–345 under market comps), **Phase 2 $848** — +12.3% over five years of documented cost inflation ≈ 2.4%/yr drift, which trips the >10% cliff badge by design; the **PIK-pref toggle holds Phase 1 at $681** (below current rents) by deferring the investor return into the buyout loan.
