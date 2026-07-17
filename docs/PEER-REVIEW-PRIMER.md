@@ -174,11 +174,14 @@ Each lens: **what they look for → what the model shows → their open question
 
 **Model shows:** the CLT receives the 3.58-acre parcel unencumbered (~$430k of value), ground-leases it to the co-op, and permanently controls resale/affordability. The structure is engineered so the CLT's affordability mission does not depend on — and is legally separated from — the seller's tax deduction. As a certified CHDO, the CLT is also the natural conduit for HOME funds (15% of allocations reserved for CHDOs) that chisel the Phase-2 rent.
 
+**Ground lease (modeled).** The co-op pays the CLT an annual ground-lease fee — modeled as a per-unit operating line (default ~$300/unit/yr, ~$26/month of tenant rent, escalating slowly at 1.5%/yr). It funds the CLT's perpetual stewardship. Two design rules: (a) keep it at a **stewardship level, not land-rent extraction**, because every dollar raises tenant rent; (b) keep it **legally separate from any CLT management contract** — pure land rent is exempt from the CLT's unrelated-business income tax under § 512(b)(3), but if the CLT also renders substantial services (management, maintenance) the rent can lose that exemption. Route CLT management, if any, through a distinct fair-market service agreement evaluated on its own for relatedness to the CLT's exempt purpose.
+
 **Open questions / red flags:**
-1. **Stewardship capacity:** the CLT holds the land forever and enforces the ground lease. Is there staffing/funding for long-term monitoring?
+1. **Stewardship capacity:** the CLT holds the land forever and enforces the ground lease. Is the ground-lease fee sized to actually fund long-term monitoring without over-burdening rent?
 2. **Ground-lease terms** (Part III.3) — the CLT is a party to the safety-valve and term provisions.
-3. **Grant compliance:** HOME (20-yr), OHTF (~15-yr), AHP (15-yr) covenants run against the property; the CLT often co-signs affordability monitoring.
-4. Pursue the **Ohio charitable-use property-tax exemption** for the land parcel — it directly lowers tenant rent.
+3. **UBIT / service-bundling** — if the CLT wants to also manage the property, structure it as a separate agreement (see above); do not fold it into the ground lease.
+4. **Grant compliance:** HOME (20-yr), OHTF (~15-yr), AHP (15-yr) covenants run against the property; the CLT often co-signs affordability monitoring.
+5. Pursue the **Ohio charitable-use property-tax exemption** for the land parcel — it directly lowers tenant rent.
 
 ### III.8 Village Council member
 

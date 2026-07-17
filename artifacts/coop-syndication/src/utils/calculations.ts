@@ -59,6 +59,7 @@ export interface DealInputs {
   repairsMaintPerUnit: number;     // $/unit/yr, year-1 level
   utilitiesPerUnit: number;        // $/unit/yr, owner-paid, year-1 level
   reservesPerUnit: number;         // $/unit/yr, year-1 level
+  cltGroundLeasePerUnit: number;   // $/unit/yr paid to the CLT for the land + stewardship
   // Seller Profile
   totalFMV: number;
   originalCostBasis: number;
@@ -130,6 +131,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   repairsMaintPerUnit: 1200,
   utilitiesPerUnit: 1150,
   reservesPerUnit: 400,
+  cltGroundLeasePerUnit: 300, // ~$25/unit/mo stewardship fee; see TOOLTIPS.groundLease
   totalFMV: 1250000,
   originalCostBasis: 475000,
   accumulatedDepreciation: 356250,
@@ -189,6 +191,7 @@ export const ESCALATORS = {
   INSURANCE: 0.08,               // habitational hard market
   PROPERTY_TAX: 0.03,            // levy growth + reappraisal cycle
   MANAGEMENT: 0.03,              // replaces the one-time ×1.15 bump (1.03^5 ≈ 1.159)
+  GROUND_LEASE: 0.015,           // CLT ground lease: slow CPI-style step, held low for affordability
   GENERAL: 0.025,                // R&M, reserves fallback
 } as const;
 
@@ -317,6 +320,7 @@ export interface OpexBreakdown {
   repairsMaint: number;
   utilities: number;
   reserves: number;
+  groundLease: number;
   total: number;
 }
 
@@ -391,7 +395,9 @@ export const TOOLTIPS = {
   vacancyGrossUp:
     'Required rents are grossed up for empty units and unpaid rent: ÷ (1 − vacancy), so occupied units carry the full requirement.',
   requiredRent:
-    'This is the rent needed to cover actual costs — loan payments, taxes, insurance, management, repairs, owner-paid utilities, replacement savings, and the investor return — not a market estimate. If it sits below market comps ($900–1,100 here), the gap is the deal\'s affordability margin.',
+    'This is the rent needed to cover actual costs — loan payments, taxes, insurance, management, repairs, owner-paid utilities, replacement savings, the CLT ground lease, and the investor return — not a market estimate. If it sits below market comps ($900–1,100 here), the gap is the deal\'s affordability margin.',
+  groundLease:
+    'What the co-op pays the Community Land Trust each year to lease the land it sits on (the CLT owns the land after the gift). Keep it at a stewardship level — enough to fund the CLT\'s perpetual monitoring, not to extract land rent — because every dollar here raises tenant rent. Typical affordability-CLT fees run ~$300–600/unit/yr. IMPORTANT (keep separate from management): pure land rent is exempt from the CLT\'s unrelated-business income tax under § 512(b)(3); if the CLT also renders substantial services (management, maintenance), that can taint the rent\'s exemption. Route any CLT management through a distinct service agreement, evaluated on its own for relatedness to the CLT\'s exempt purpose.',
   municipalTax:
     'Yellow Springs charges 1.5%, but Ohio law bars cities from taxing interest or capital gains — so it never touches the seller\'s loan income, only positive rental profits (which large depreciation zeroes out in most years).',
   ohioBID:
@@ -444,8 +450,12 @@ function opexAt(inputs: DealInputs, year: number): OpexBreakdown {
     repairsMaint: escalate(inputs.repairsMaintPerUnit * inputs.units, E.GENERAL, year),
     utilities: escalate(inputs.utilitiesPerUnit * inputs.units, E.UTILITIES, year),
     reserves: escalate(inputs.reservesPerUnit * inputs.units, E.GENERAL, year),
+    groundLease: escalate(inputs.cltGroundLeasePerUnit * inputs.units, E.GROUND_LEASE, year),
   };
-  return { ...b, total: b.propertyTaxes + b.insurance + b.mgmt + b.repairsMaint + b.utilities + b.reserves };
+  return {
+    ...b,
+    total: b.propertyTaxes + b.insurance + b.mgmt + b.repairsMaint + b.utilities + b.reserves + b.groundLease,
+  };
 }
 
 // Seller state tax on note income for one year. Business-income treatment
