@@ -60,7 +60,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
             checked={inputs.sellerFilingStatus === 'mfj'}
             onChange={(v) => update('sellerFilingStatus', v ? 'mfj' : 'single')}
           />
-          <SliderRow label="Time-value discount rate" tip="Used to compare money received today against money received over 20 years. Higher = you value future dollars less." value={inputs.discountRate} formatter={formatPercent} min={0} max={10} step={0.5} onChange={(v) => update('discountRate', v)} />
+          <SliderRow label="Time-value discount rate (after-tax)" tip="The seller's after-tax opportunity cost — what a dollar received years from now is worth today. It is applied to AFTER-TAX cash flows, so compare it to the note's AFTER-TAX yield, not its 6% coupon: 6% taxed at ordinary rates nets ~4.4%. At a 5% after-tax discount the note barely edges a cash sale; at a more typical 3–4% after-tax alternative it wins clearly. This rate is the single biggest swing factor in the cash-vs-note comparison." value={inputs.discountRate} formatter={formatPercent} min={0} max={10} step={0.5} onChange={(v) => update('discountRate', v)} />
         </Group>
 
         <Group title="Deal Structure">
