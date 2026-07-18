@@ -14,3 +14,10 @@ export function formatCurrency(value: number): string {
 export function formatPercent(value: number): string {
   return value.toFixed(1) + "%";
 }
+
+// For editable percent INPUTS: show the typed precision (up to 2 decimals,
+// trailing zeros trimmed) so a value like 6.35% doesn't display as 6.3%.
+// Computed outputs keep formatPercent's fixed 1-decimal form.
+export function formatPercentInput(value: number): string {
+  return (Math.round(value * 100) / 100).toString() + "%";
+}
