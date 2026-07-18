@@ -392,6 +392,8 @@ export const TOOLTIPS = {
     'An extra 3.8% federal tax on investment income above $250k (married) / $200k (single). Spreading the sale keeps most years under the line — a lump-sum sale maximizes it. Applied automatically per year.',
   ltcgBracket:
     'Long-term gains are taxed at 15% until income crosses ~$614k (married, 2026; ~$533k single), then 20%. Installments keep annual gain in the 15% bracket; a lump-sum sale pushes most of it to 20% + surtax.',
+  discountRateAfterTax:
+    'The NPV column discounts AFTER-TAX cash flows at the seller\'s after-tax opportunity cost (the "discount rate" slider). Read the 6% note coupon after tax: at ordinary rates it nets ~4.4%, so at a 5% after-tax discount the deferred principal loses a little present value each year — which is why the installment NPV sits below its nominal and only slightly above a bifurcated cash sale. Lower the discount rate toward a realistic after-tax alternative (3–4%) and the note wins decisively; the tax deferral, bracket-smoothing, and NIIT avoidance are on top of that.',
   exitTax:
     'Five years of write-offs lower the property\'s tax basis, so the buyout triggers a tax bill — the write-offs are a deferral, not a gift. How much is taxed at high ordinary rates vs. 25%/15% depends on the negotiated exit price allocation (see the "Exit value on short-life items" slider — worth 1.5–2.5 points of IRR). For your CPA: § 1245 ordinary recapture on cost-seg/short-life property; unrecaptured § 1250 on the shell.',
   exitAllocation:
@@ -842,8 +844,12 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
   };
 
   const instNominal = ctx.installmentFlows.reduce((a, b) => a + b, 0);
+  // Discount with Year 1 = t0, consistent with the two cash scenarios (whose
+  // Year-1 proceeds — and the installment down payment — are received at
+  // closing). The prior i+1 exponent discounted the installment's closing-day
+  // cash a full year while the cash scenarios did not, understating it.
   const instNpv = ctx.installmentFlows.reduce(
-    (acc, cf, i) => acc + cf / Math.pow(1 + ctx.disc, i + 1),
+    (acc, cf, i) => acc + cf / Math.pow(1 + ctx.disc, i),
     0,
   );
   const installmentPlusDonation: SellerScenario = {

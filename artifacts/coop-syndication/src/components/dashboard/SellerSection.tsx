@@ -143,7 +143,7 @@ export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltip
       <div className="bg-card border border-border rounded-md overflow-hidden">
         <div className="px-4 py-2 border-b border-border bg-muted/20">
           <span className="text-[11px] font-medium text-foreground">Why Not Just Take Cash? &mdash; After-Tax Scenario Comparison</span>
-          <InfoTooltip text={tooltips.ltcgBracket} />
+          <InfoTooltip text={tooltips.discountRateAfterTax} />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[11px] tabular-nums whitespace-nowrap">
