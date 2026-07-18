@@ -20,7 +20,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
   const [isOpen, setIsOpen] = React.useState(false);
 
   return (
-    <div className="w-full lg:w-[320px] flex-shrink-0 bg-[#0c0c0e] border-r border-border flex flex-col h-auto lg:h-screen lg:sticky lg:top-0 z-40">
+    <div className="w-full lg:w-[380px] flex-shrink-0 bg-[#0c0c0e] border-r border-border flex flex-col h-auto lg:h-screen lg:sticky lg:top-0 z-40">
       <button
         type="button"
         className="w-full px-6 py-4 flex items-center justify-between border-b border-border lg:hidden cursor-pointer bg-card text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -28,7 +28,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
         aria-expanded={isOpen}
         aria-controls="sidebar-parameters"
       >
-        <span className="text-sm font-semibold tracking-wide uppercase text-foreground">Configure Parameters</span>
+        <span className="text-[17px] font-semibold tracking-wide uppercase text-foreground">Configure Parameters</span>
         {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
 
@@ -38,10 +38,10 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
           <SliderRow label="Current average rent" tip="What tenants pay per month today. The tool compares this to the rent the co-op would actually need to charge." value={inputs.currentRent} formatter={formatCurrency} min={400} max={1500} step={25} onChange={(v) => update('currentRent', v)} />
           <SliderRow label="Vacancy allowance" tip="The share of rent you expect to lose to empty units and unpaid rent. Even full buildings budget 3–5%." value={inputs.vacancyRate} formatter={formatPercent} min={0} max={15} step={1} onChange={(v) => update('vacancyRate', v)} />
           <SliderRow label="Property taxes (per year)" tip="The annual real-estate tax bill. After a sale, the county auditor usually resets the value to the sale price, so the new owner's bill may be higher. Escalates 3%/yr in the model." value={inputs.propertyTaxes} formatter={formatCurrency} min={10000} max={50000} step={500} onChange={(v) => update('propertyTaxes', v)} />
-          <SliderRow label="Property insurance (per year)" tip="The building's insurance premium. Insurance for older apartment buildings has risen sharply — nationally about $780/unit in 2024 and climbing ~8% per year, which the model applies." value={inputs.annualInsuranceMisc} formatter={formatCurrency} min={5000} max={40000} step={500} onChange={(v) => update('annualInsuranceMisc', v)} />
+          <SliderRow label="Property insurance (per year)" tip="The building's insurance premium. Insurance for older apartment buildings has risen sharply — nationally about $780/unit in 2024. Its escalator is adjustable (5% default) in the Inflation & Escalators group." value={inputs.annualInsuranceMisc} formatter={formatCurrency} min={5000} max={40000} step={500} onChange={(v) => update('annualInsuranceMisc', v)} />
           <SliderRow label="Management fee (per unit/mo)" tip="What you pay a property manager. Contract on a FLAT per-door fee — never a percentage of rent or costs, which pays the manager more for spending more (weekly mowing at 7% markup). Carve big recurring services (landscaping, turns) into competitively-bid or tenant-performed work. Grows 3%/yr; a self-managing co-op can reduce or remove it." value={inputs.mgmtFeePerDoor} formatter={formatCurrency} min={0} max={150} step={5} onChange={(v) => update('mgmtFeePerDoor', v)} />
           <SliderRow label="Repairs & maintenance (per unit/yr)" tip="Routine upkeep — plumbing calls, paint, appliances. Older buildings need bigger budgets; $1,200/unit is a realistic floor for a 1960s property." value={inputs.repairsMaintPerUnit} formatter={formatCurrency} min={0} max={2500} step={50} onChange={(v) => update('repairsMaintPerUnit', v)} />
-          <SliderRow label="Owner-paid utilities (per unit/yr)" tip="Water, sewer, trash, and shared-area electric the owner pays. In Yellow Springs, water + sewer alone runs about $870/unit/year — the highest rates in the region — and escalates 8%/yr." value={inputs.utilitiesPerUnit} formatter={formatCurrency} min={0} max={2000} step={50} onChange={(v) => update('utilitiesPerUnit', v)} />
+          <SliderRow label="Owner-paid utilities (per unit/yr)" tip="Water, sewer, trash, and shared-area electric the owner pays. In Yellow Springs, water + sewer alone runs about $870/unit/year — the highest rates in the region. Its escalator is adjustable (5.5% blended default) in the Inflation & Escalators group." value={inputs.utilitiesPerUnit} formatter={formatCurrency} min={0} max={2000} step={50} onChange={(v) => update('utilitiesPerUnit', v)} />
           <SliderRow label="Replacement savings (per unit/yr)" tip="Money set aside every year for big-ticket items — roofs, furnaces, parking — so the co-op never faces a surprise special assessment." value={inputs.reservesPerUnit} formatter={formatCurrency} min={0} max={1000} step={25} onChange={(v) => update('reservesPerUnit', v)} />
           <SliderRow label="CLT ground lease (per unit/yr)" tip="What the co-op pays the land trust each year to lease the land it sits on. Keep it at a stewardship level (~$300–600/unit) — every dollar raises rent. Keep it legally SEPARATE from any CLT management contract: pure land rent is UBIT-exempt for the CLT, but bundling in services can taint that exemption." value={inputs.cltGroundLeasePerUnit} formatter={formatCurrency} min={0} max={1200} step={25} onChange={(v) => update('cltGroundLeasePerUnit', v)} />
         </Group>
@@ -79,6 +79,14 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
             checked={inputs.ohioBIDConfirmed}
             onChange={(v) => update('ohioBIDConfirmed', v)}
           />
+        </Group>
+
+        <Group title="Inflation & Escalators (avg %/yr)">
+          <SliderRow label="Owner-paid utilities" tip="Long-run AVERAGE annual increase for water/sewer/trash — not the near-term spike. Yellow Springs water is ordinance-locked at 8%/yr only through 2027; after that PFAS capital keeps some pressure but it normalizes toward ~4%. The 5.5% default blends the two over the hold; adjust to taste." value={inputs.escUtilities} formatter={formatPercent} min={0} max={10} step={0.5} onChange={(v) => update('escUtilities', v)} />
+          <SliderRow label="Insurance" tip="Average annual premium increase. The 2020s habitational hard market ran ~8%/yr but softens over time; 5% is a blended long-run default." value={inputs.escInsurance} formatter={formatPercent} min={0} max={10} step={0.5} onChange={(v) => update('escInsurance', v)} />
+          <SliderRow label="Property taxes" tip="Average annual growth from levies and the reappraisal cycle." value={inputs.escPropertyTax} formatter={formatPercent} min={0} max={8} step={0.5} onChange={(v) => update('escPropertyTax', v)} />
+          <SliderRow label="Management" tip="Average annual management-fee growth." value={inputs.escManagement} formatter={formatPercent} min={0} max={8} step={0.5} onChange={(v) => update('escManagement', v)} />
+          <SliderRow label="Repairs, reserves & other" tip="Average annual inflation for repairs & maintenance, replacement reserves, and any unspecified operating line." value={inputs.escGeneral} formatter={formatPercent} min={0} max={8} step={0.5} onChange={(v) => update('escGeneral', v)} />
         </Group>
 
         <Group title="Grants & Subsidy — $0 = not awarded">
@@ -125,7 +133,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
 function Group({ title, children, last }: { title: string; children: React.ReactNode; last?: boolean }) {
   return (
     <div className={`space-y-6 ${last ? 'pb-8' : ''}`}>
-      <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border pb-1">{title}</h3>
+      <h3 className="text-[14px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border pb-1">{title}</h3>
       {children}
     </div>
   );
@@ -134,22 +142,62 @@ function Group({ title, children, last }: { title: string; children: React.React
 function SliderRow({ label, tip, value, formatter, min, max, step, onChange }: { label: string, tip?: string, value: number, formatter: (v: number) => string, min: number, max: number, step: number, onChange: (v: number) => void }) {
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-baseline">
-        <label className="text-[11px] text-muted-foreground leading-tight max-w-[70%]">
+      <div className="flex justify-between items-baseline gap-2">
+        <label className="text-[14px] text-foreground/90 leading-snug flex-1 min-w-0 pr-2">
           {label}
           {tip && <InfoTooltip text={tip} />}
         </label>
-        <span className="text-xs tabular-nums text-foreground">{formatter(value)}</span>
+        <EditableValue value={value} formatter={formatter} min={min} max={max} step={step} onChange={onChange} label={label} />
       </div>
       <Slider aria-label={label} min={min} max={max} step={step} value={[value]} onValueChange={([v]) => onChange(v)} />
     </div>
   );
 }
 
+// Displays the formatted value; click/focus to type an exact number. On commit
+// (blur or Enter) the entry is parsed (currency/%/unit suffixes stripped),
+// clamped to [min, max], and snapped to the slider's step so the thumb stays
+// aligned. Escape cancels.
+function EditableValue({ value, formatter, min, max, step, onChange, label }: { value: number, formatter: (v: number) => string, min: number, max: number, step: number, onChange: (v: number) => void, label: string }) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const cancelRef = React.useRef(false);
+
+  const commit = () => {
+    if (cancelRef.current) { cancelRef.current = false; setEditing(false); return; }
+    const parsed = parseFloat(draft.replace(/[^0-9.\-]/g, ''));
+    if (!Number.isNaN(parsed)) {
+      const snapped = Math.round(parsed / step) * step;
+      const clamped = Math.min(max, Math.max(min, snapped));
+      // Round to step's decimal precision to avoid float dust (e.g. 5.5000001).
+      const decimals = (String(step).split('.')[1] || '').length;
+      onChange(Number(clamped.toFixed(decimals)));
+    }
+    setEditing(false);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={`${label} value`}
+      className="w-[112px] shrink-0 bg-transparent text-right text-[15px] tabular-nums text-foreground rounded px-1.5 py-1 outline-none border border-border/60 hover:border-border focus:border-ring focus:bg-muted/40 transition-colors cursor-text"
+      value={editing ? draft : formatter(value)}
+      onFocus={(e) => { setDraft(String(value)); setEditing(true); e.currentTarget.select(); }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.currentTarget.blur(); }
+        else if (e.key === 'Escape') { cancelRef.current = true; e.currentTarget.blur(); }
+      }}
+    />
+  );
+}
+
 function SwitchRow({ id, label, tip, checked, onChange }: { id: string; label: string; tip?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="flex items-center justify-between">
-      <label htmlFor={id} className="text-[11px] text-muted-foreground leading-tight max-w-[70%]">
+      <label htmlFor={id} className="text-[14px] text-foreground/90 leading-snug flex-1 min-w-0 pr-2">
         {label}
         {tip && <InfoTooltip text={tip} />}
       </label>
