@@ -412,6 +412,8 @@ export const TOOLTIPS = {
     'An extra 3.8% federal tax on investment income above $250k (married) / $200k (single). Spreading the sale keeps most years under the line — a lump-sum sale maximizes it. Applied automatically per year.',
   ltcgBracket:
     'Long-term gains are taxed at 15% until income crosses ~$614k (married, 2026; ~$533k single), then 20%. Installments keep annual gain in the 15% bracket; a lump-sum sale pushes most of it to 20% + surtax.',
+  noteVsCashKpi:
+    'Compares the seller-financed note to selling the SAME bifurcated deal for cash — it holds the land donation fixed and isolates just the financing choice. This equals the third row minus the second row of the "Why Not Just Take Cash?" panel (Installment + donation − Cash sale + donation). Positive means the note nets more after-tax NPV than a cash sale of the improvements (6% interest, tax deferral, bracket-smoothing, NIIT avoidance, full § 170 absorption). It is NOT measured against the top row — a straight cash sale of the whole property — which nets more only because it keeps the donated land (that gap is the philanthropy, not the financing).',
   discountRateAfterTax:
     'The NPV column discounts AFTER-TAX cash flows at the seller\'s after-tax opportunity cost (the "discount rate" slider). Read the 6% note coupon after tax: at ordinary rates it nets ~4.4%, so at a 5% after-tax discount the deferred principal loses a little present value each year — which is why the installment NPV sits below its nominal and only slightly above a bifurcated cash sale. Lower the discount rate toward a realistic after-tax alternative (3–4%) and the note wins decisively; the tax deferral, bracket-smoothing, and NIIT avoidance are on top of that.',
   exitTax:

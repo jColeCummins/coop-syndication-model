@@ -3,7 +3,7 @@ import { DealInputs } from '@/utils/calculations';
 import { InputAction } from '@/App';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { formatCurrency, formatPercent } from '@/lib/utils';
+import { formatCurrency, formatPercent, formatPercentInput } from '@/lib/utils';
 import { InfoTooltip } from './InfoTooltip';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -36,7 +36,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
         <Group title="Property & Operations">
           <SliderRow label="Number of apartments" tip="Total rentable homes in the deal, including any standalone house." value={inputs.units} formatter={(v) => v.toString()} min={10} max={50} step={1} onChange={(v) => update('units', v)} />
           <SliderRow label="Current average rent" tip="What tenants pay per month today. The tool compares this to the rent the co-op would actually need to charge." value={inputs.currentRent} formatter={formatCurrency} min={400} max={1500} step={25} onChange={(v) => update('currentRent', v)} />
-          <SliderRow label="Vacancy allowance" tip="The share of rent you expect to lose to empty units and unpaid rent. Even full buildings budget 3–5%." value={inputs.vacancyRate} formatter={formatPercent} min={0} max={15} step={1} onChange={(v) => update('vacancyRate', v)} />
+          <SliderRow label="Vacancy allowance" tip="The share of rent you expect to lose to empty units and unpaid rent. Even full buildings budget 3–5%." value={inputs.vacancyRate} formatter={formatPercentInput} min={0} max={15} step={1} onChange={(v) => update('vacancyRate', v)} />
           <SliderRow label="Property taxes (per year)" tip="The annual real-estate tax bill. After a sale, the county auditor usually resets the value to the sale price, so the new owner's bill may be higher. Escalates 3%/yr in the model." value={inputs.propertyTaxes} formatter={formatCurrency} min={10000} max={50000} step={500} onChange={(v) => update('propertyTaxes', v)} />
           <SliderRow label="Property insurance (per year)" tip="The building's insurance premium. Insurance for older apartment buildings has risen sharply — nationally about $780/unit in 2024. Its escalator is adjustable (5% default) in the Inflation & Escalators group." value={inputs.annualInsuranceMisc} formatter={formatCurrency} min={5000} max={40000} step={500} onChange={(v) => update('annualInsuranceMisc', v)} />
           <SliderRow label="Management fee (per unit/mo)" tip="What you pay a property manager. Contract on a FLAT per-door fee — never a percentage of rent or costs, which pays the manager more for spending more (weekly mowing at 7% markup). Carve big recurring services (landscaping, turns) into competitively-bid or tenant-performed work. Grows 3%/yr; a self-managing co-op can reduce or remove it." value={inputs.mgmtFeePerDoor} formatter={formatCurrency} min={0} max={150} step={5} onChange={(v) => update('mgmtFeePerDoor', v)} />
@@ -52,7 +52,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
           <SliderRow label="Depreciation already claimed" tip="Total depreciation taken over the years. A building held since 1993 is fully written off; the IRS taxes this amount at up to 25% as sale payments arrive." value={inputs.accumulatedDepreciation} formatter={formatCurrency} min={0} max={1000000} step={5000} onChange={(v) => update('accumulatedDepreciation', v)} />
           <SliderRow label="Land gift to the land trust" tip="The appraised value of the land donated to the Community Land Trust. A genuine gift — the deduction softens it but never fully pays for it. The dashboard shows the largest gift the seller can fully deduct before the six-year window closes." value={inputs.cltLandDonation} formatter={formatCurrency} min={0} max={1000000} step={10000} onChange={(v) => update('cltLandDonation', v)} />
           <SliderRow label="Seller's other yearly income" tip="Income apart from this deal (pension, wages, etc.). It determines tax brackets and how much of the donation deduction can be used each year." value={inputs.sellerOtherIncome} formatter={formatCurrency} min={0} max={300000} step={5000} onChange={(v) => update('sellerOtherIncome', v)} />
-          <SliderRow label="Seller's income-tax bracket" tip="The seller's federal marginal rate on ordinary income like note interest." value={inputs.sellerOrdinaryRate} formatter={formatPercent} min={10} max={37} step={1} onChange={(v) => update('sellerOrdinaryRate', v)} />
+          <SliderRow label="Seller's income-tax bracket" tip="The seller's federal marginal rate on ordinary income like note interest." value={inputs.sellerOrdinaryRate} formatter={formatPercentInput} min={10} max={37} step={1} onChange={(v) => update('sellerOrdinaryRate', v)} />
           <SwitchRow
             id="filing-status"
             label="Married filing jointly"
@@ -60,18 +60,18 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
             checked={inputs.sellerFilingStatus === 'mfj'}
             onChange={(v) => update('sellerFilingStatus', v ? 'mfj' : 'single')}
           />
-          <SliderRow label="Time-value discount rate (after-tax)" tip="The seller's after-tax opportunity cost — what a dollar received years from now is worth today. It is applied to AFTER-TAX cash flows, so compare it to the note's AFTER-TAX yield, not its 6% coupon: 6% taxed at ordinary rates nets ~4.4%. At a 5% after-tax discount the note barely edges a cash sale; at a more typical 3–4% after-tax alternative it wins clearly. This rate is the single biggest swing factor in the cash-vs-note comparison." value={inputs.discountRate} formatter={formatPercent} min={0} max={10} step={0.5} onChange={(v) => update('discountRate', v)} />
+          <SliderRow label="Time-value discount rate (after-tax)" tip="The seller's after-tax opportunity cost — what a dollar received years from now is worth today. It is applied to AFTER-TAX cash flows, so compare it to the note's AFTER-TAX yield, not its 6% coupon: 6% taxed at ordinary rates nets ~4.4%. At a 5% after-tax discount the note barely edges a cash sale; at a more typical 3–4% after-tax alternative it wins clearly. This rate is the single biggest swing factor in the cash-vs-note comparison." value={inputs.discountRate} formatter={formatPercentInput} min={0} max={10} step={0.5} onChange={(v) => update('discountRate', v)} />
         </Group>
 
         <Group title="Deal Structure">
-          <SliderRow label="Down payment to seller" tip="Cash to the seller at closing, as a % of the purchase price — funded by the investors, not the tenants. Must cover the seller's first-year tax (the dashboard warns if not). Counterintuitively, a BIGGER down payment slightly RAISES the Year-5 buyout rent: it is investor capital the co-op must repay in full at buyout, whereas seller financing partly amortizes away by then — so a higher down payment shifts the stack from self-amortizing seller debt to non-amortizing investor equity." value={inputs.sellerDownPaymentPct} formatter={formatPercent} min={0} max={30} step={1} onChange={(v) => update('sellerDownPaymentPct', v)} />
-          <SliderRow label="Seller loan interest rate" tip="The rate on the loan the seller carries. Must be at least the IRS minimum (published monthly); typically below a bank rate — that gap is part of the deal's affordability." value={inputs.sellerInterestRate} formatter={formatPercent} min={3} max={10} step={0.25} onChange={(v) => update('sellerInterestRate', v)} />
+          <SliderRow label="Down payment to seller" tip="Cash to the seller at closing, as a % of the purchase price — funded by the investors, not the tenants. Must cover the seller's first-year tax (the dashboard warns if not). Counterintuitively, a BIGGER down payment slightly RAISES the Year-5 buyout rent: it is investor capital the co-op must repay in full at buyout, whereas seller financing partly amortizes away by then — so a higher down payment shifts the stack from self-amortizing seller debt to non-amortizing investor equity." value={inputs.sellerDownPaymentPct} formatter={formatPercentInput} min={0} max={30} step={1} onChange={(v) => update('sellerDownPaymentPct', v)} />
+          <SliderRow label="Seller loan interest rate" tip="The rate on the loan the seller carries. Must be at least the IRS minimum (published monthly); typically below a bank rate — that gap is part of the deal's affordability." value={inputs.sellerInterestRate} formatter={formatPercentInput} min={3} max={10} step={0.25} onChange={(v) => update('sellerInterestRate', v)} />
           <SliderRow label="Loan payoff schedule (years)" tip="Payments are sized as if the loan ran this long, even though it's paid off early at the buyout. Longer = lower payments = lower rents, but a bigger final payoff." value={inputs.noteTermYears} formatter={(v) => `${v}yr`} min={5} max={30} step={1} onChange={(v) => update('noteTermYears', v)} />
           <SliderRow label="Buyout year" tip="The year the co-op refinances with a bank, pays the seller the remaining balance, and returns the investors' money. Also drives how fast the seller's donation deduction is absorbed." value={inputs.balloonYear} formatter={(v) => v.toString()} min={1} max={10} step={1} onChange={(v) => update('balloonYear', v)} />
-          <SliderRow label="Bank mortgage rate at buyout" tip="The rate the co-op expects on the bank loan that pays off the seller and investors. The co-op's ability to qualify for this loan is the deal's most important risk." value={inputs.phase2CommercialRate} formatter={formatPercent} min={4} max={10} step={0.25} onChange={(v) => update('phase2CommercialRate', v)} />
+          <SliderRow label="Bank mortgage rate at buyout" tip="The rate the co-op expects on the bank loan that pays off the seller and investors. The co-op's ability to qualify for this loan is the deal's most important risk." value={inputs.phase2CommercialRate} formatter={formatPercentInput} min={4} max={10} step={0.25} onChange={(v) => update('phase2CommercialRate', v)} />
           <SliderRow label="Bank loan term at buyout (years)" tip="The amortization length of the co-op's Phase-2 bank mortgage — its own loan, separate from the seller note. Longer term = lower monthly payment = lower Phase-2 rent, but more total interest over time. Commercial multifamily commonly amortizes over 25–30 years; agency/CLT-friendly programs sometimes reach 35–40." value={inputs.phase2AmortYears} formatter={(v) => `${v}yr`} min={10} max={40} step={1} onChange={(v) => update('phase2AmortYears', v)} />
-          <SliderRow label="State income tax" tip="Ohio's flat rate (2.75%, 2026). Applies to note interest and gains unless the business-income deduction below covers them." value={inputs.stateTaxRate} formatter={formatPercent} min={0} max={5} step={0.25} onChange={(v) => update('stateTaxRate', v)} />
-          <SliderRow label="City income tax" tip="Yellow Springs charges 1.5%, but Ohio law bars cities from taxing interest or capital gains — it only touches positive rental profits, which depreciation zeroes out in most years." value={inputs.localTaxRate} formatter={formatPercent} min={0} max={3} step={0.25} onChange={(v) => update('localTaxRate', v)} />
+          <SliderRow label="State income tax" tip="Ohio's flat rate (2.75%, 2026). Applies to note interest and gains unless the business-income deduction below covers them." value={inputs.stateTaxRate} formatter={formatPercentInput} min={0} max={5} step={0.25} onChange={(v) => update('stateTaxRate', v)} />
+          <SliderRow label="City income tax" tip="Yellow Springs charges 1.5%, but Ohio law bars cities from taxing interest or capital gains — it only touches positive rental profits, which depreciation zeroes out in most years." value={inputs.localTaxRate} formatter={formatPercentInput} min={0} max={3} step={0.25} onChange={(v) => update('localTaxRate', v)} />
           <SwitchRow
             id="ohio-bid"
             label="Ohio business-income deduction"
@@ -82,11 +82,11 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
         </Group>
 
         <Group title="Inflation & Escalators (avg %/yr)">
-          <SliderRow label="Owner-paid utilities" tip="Long-run AVERAGE annual increase for water/sewer/trash — not the near-term spike. Yellow Springs water is ordinance-locked at 8%/yr only through 2027; after that PFAS capital keeps some pressure but it normalizes toward ~4%. The 5.5% default blends the two over the hold; adjust to taste." value={inputs.escUtilities} formatter={formatPercent} min={0} max={10} step={0.5} onChange={(v) => update('escUtilities', v)} />
-          <SliderRow label="Insurance" tip="Average annual premium increase. The 2020s habitational hard market ran ~8%/yr but softens over time; 5% is a blended long-run default." value={inputs.escInsurance} formatter={formatPercent} min={0} max={10} step={0.5} onChange={(v) => update('escInsurance', v)} />
-          <SliderRow label="Property taxes" tip="Average annual growth from levies and the reappraisal cycle." value={inputs.escPropertyTax} formatter={formatPercent} min={0} max={8} step={0.5} onChange={(v) => update('escPropertyTax', v)} />
-          <SliderRow label="Management" tip="Average annual management-fee growth." value={inputs.escManagement} formatter={formatPercent} min={0} max={8} step={0.5} onChange={(v) => update('escManagement', v)} />
-          <SliderRow label="Repairs, reserves & other" tip="Average annual inflation for repairs & maintenance, replacement reserves, and any unspecified operating line." value={inputs.escGeneral} formatter={formatPercent} min={0} max={8} step={0.5} onChange={(v) => update('escGeneral', v)} />
+          <SliderRow label="Owner-paid utilities" tip="Long-run AVERAGE annual increase for water/sewer/trash — not the near-term spike. Yellow Springs water is ordinance-locked at 8%/yr only through 2027; after that PFAS capital keeps some pressure but it normalizes toward ~4%. The 5.5% default blends the two over the hold; adjust to taste." value={inputs.escUtilities} formatter={formatPercentInput} min={0} max={10} step={0.5} onChange={(v) => update('escUtilities', v)} />
+          <SliderRow label="Insurance" tip="Average annual premium increase. The 2020s habitational hard market ran ~8%/yr but softens over time; 5% is a blended long-run default." value={inputs.escInsurance} formatter={formatPercentInput} min={0} max={10} step={0.5} onChange={(v) => update('escInsurance', v)} />
+          <SliderRow label="Property taxes" tip="Average annual growth from levies and the reappraisal cycle." value={inputs.escPropertyTax} formatter={formatPercentInput} min={0} max={8} step={0.5} onChange={(v) => update('escPropertyTax', v)} />
+          <SliderRow label="Management" tip="Average annual management-fee growth." value={inputs.escManagement} formatter={formatPercentInput} min={0} max={8} step={0.5} onChange={(v) => update('escManagement', v)} />
+          <SliderRow label="Repairs, reserves & other" tip="Average annual inflation for repairs & maintenance, replacement reserves, and any unspecified operating line." value={inputs.escGeneral} formatter={formatPercentInput} min={0} max={8} step={0.5} onChange={(v) => update('escGeneral', v)} />
         </Group>
 
         <Group title="Grants & Subsidy — $0 = not awarded">
@@ -104,7 +104,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
         </Group>
 
         <Group title="Investors & Renovation" last>
-          <SliderRow label="Investor preferred return" tip="The fixed yearly return investors earn on their money. They get this plus their money back at buyout — and no share of appreciation (the ground lease locks that in for the community)." value={inputs.investorPrefReturn} formatter={formatPercent} min={0} max={12} step={0.5} onChange={(v) => update('investorPrefReturn', v)} />
+          <SliderRow label="Investor preferred return" tip="The fixed yearly return investors earn on their money. They get this plus their money back at buyout — and no share of appreciation (the ground lease locks that in for the community)." value={inputs.investorPrefReturn} formatter={formatPercentInput} min={0} max={12} step={0.5} onChange={(v) => update('investorPrefReturn', v)} />
           <SwitchRow
             id="pref-current"
             label="Pay investor return from rents"
@@ -112,7 +112,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
             checked={inputs.prefCurrentPay}
             onChange={(v) => update('prefCurrentPay', v)}
           />
-          <SliderRow label="Investor tax bracket" tip="Investors' federal marginal rate. Higher-bracket investors get more value from the deal's depreciation deductions." value={inputs.investorMarginalRate} formatter={formatPercent} min={10} max={37} step={1} onChange={(v) => update('investorMarginalRate', v)} />
+          <SliderRow label="Investor tax bracket" tip="Investors' federal marginal rate. Higher-bracket investors get more value from the deal's depreciation deductions." value={inputs.investorMarginalRate} formatter={formatPercentInput} min={10} max={37} step={1} onChange={(v) => update('investorMarginalRate', v)} />
           <SwitchRow
             id="reps-switch"
             label="Real-estate professional investors"
@@ -120,7 +120,7 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
             checked={inputs.investorHasREPS}
             onChange={(v) => update('investorHasREPS', v)}
           />
-          <SliderRow label="Exit value on short-life items" tip="At buyout, how much of the price is attributed to appliances/site work (taxed at high ordinary rates) vs. the building (25%/15%). Five-year-old appliances justify a low number — negotiate this schedule; it's worth 1.5–2.5 points of IRR." value={inputs.exitShortLifeAllocationPct} formatter={formatPercent} min={0} max={100} step={5} onChange={(v) => update('exitShortLifeAllocationPct', v)} />
+          <SliderRow label="Exit value on short-life items" tip="At buyout, how much of the price is attributed to appliances/site work (taxed at high ordinary rates) vs. the building (25%/15%). Five-year-old appliances justify a low number — negotiate this schedule; it's worth 1.5–2.5 points of IRR." value={inputs.exitShortLifeAllocationPct} formatter={formatPercentInput} min={0} max={100} step={5} onChange={(v) => update('exitShortLifeAllocationPct', v)} />
           <SliderRow label="Renovation: roof & structure" tip="Building-shell work, deducted slowly over 27.5 years — no first-year write-off. Renovation dollars earn the preferred return but dilute headline IRR; they're for building health, not returns." value={inputs.capexRoofStruct} formatter={formatCurrency} min={0} max={200000} step={5000} onChange={(v) => update('capexRoofStruct', v)} />
           <SliderRow label="Renovation: parking & site" tip="Parking, walkways, landscaping. Qualifies for the 100% first-year write-off." value={inputs.capexParkingLand} formatter={formatCurrency} min={0} max={100000} step={5000} onChange={(v) => update('capexParkingLand', v)} />
           <SliderRow label="Renovation: appliances & interiors" tip="Appliances, flooring, fixtures — including water-saving fixtures, which at Yellow Springs water rates are the best-returning dollars in the whole budget. 100% first-year write-off." value={inputs.capexAppliances} formatter={formatCurrency} min={0} max={100000} step={5000} onChange={(v) => update('capexAppliances', v)} />
@@ -155,23 +155,23 @@ function SliderRow({ label, tip, value, formatter, min, max, step, onChange }: {
 }
 
 // Displays the formatted value; click/focus to type an exact number. On commit
-// (blur or Enter) the entry is parsed (currency/%/unit suffixes stripped),
-// clamped to [min, max], and snapped to the slider's step so the thumb stays
-// aligned. Escape cancels.
+// (blur or Enter) the entry is parsed (currency/%/unit suffixes stripped) and
+// clamped to [min, max]. Typed values keep their precision — e.g. 3.5% vacancy
+// even though the drag step is 1 — while dragging the slider still moves on the
+// step "grain". Escape cancels.
 function EditableValue({ value, formatter, min, max, step, onChange, label }: { value: number, formatter: (v: number) => string, min: number, max: number, step: number, onChange: (v: number) => void, label: string }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState('');
   const cancelRef = React.useRef(false);
+  void step; // step governs slider drag increments, not typed precision
 
   const commit = () => {
     if (cancelRef.current) { cancelRef.current = false; setEditing(false); return; }
     const parsed = parseFloat(draft.replace(/[^0-9.\-]/g, ''));
     if (!Number.isNaN(parsed)) {
-      const snapped = Math.round(parsed / step) * step;
-      const clamped = Math.min(max, Math.max(min, snapped));
-      // Round to step's decimal precision to avoid float dust (e.g. 5.5000001).
-      const decimals = (String(step).split('.')[1] || '').length;
-      onChange(Number(clamped.toFixed(decimals)));
+      const clamped = Math.min(max, Math.max(min, parsed));
+      // Keep the typed precision; round only to kill float dust.
+      onChange(Math.round(clamped * 10000) / 10000);
     }
     setEditing(false);
   };

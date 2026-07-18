@@ -1,6 +1,7 @@
 import React from 'react';
-import { DealMetrics } from '@/utils/calculations';
+import { DealMetrics, TOOLTIPS } from '@/utils/calculations';
 import { formatCurrency, formatPercent } from '@/lib/utils';
+import { InfoTooltip } from './InfoTooltip';
 
 export function KPIStrip({ model }: { model: DealMetrics }) {
   const hr = model.seller.headroom;
@@ -16,10 +17,11 @@ export function KPIStrip({ model }: { model: DealMetrics }) {
         subtitle="DP − Y1 tax"
       />
       <KPICard
-        title="Note vs Cash (NPV)"
+        title="Note vs Cash Sale of Same Gift"
         value={formatCurrency(npvAdv)}
         valueClass={npvAdv < 0 ? 'text-destructive' : 'text-emerald-500'}
-        subtitle="given the donation"
+        subtitle="NPV, donation held fixed"
+        tip={TOOLTIPS.noteVsCashKpi}
       />
       <KPICard
         title="Required Capital"
@@ -46,10 +48,12 @@ export function KPIStrip({ model }: { model: DealMetrics }) {
   );
 }
 
-function KPICard({ title, value, subtitle, valueClass }: { title: string, value: string, subtitle?: string, valueClass?: string }) {
+function KPICard({ title, value, subtitle, valueClass, tip }: { title: string, value: string, subtitle?: string, valueClass?: string, tip?: string }) {
   return (
     <div className="bg-card border border-border px-5 py-4 rounded-md flex flex-col justify-center gap-1.5">
-      <span className="text-[13px] uppercase tracking-widest text-muted-foreground font-medium">{title}</span>
+      <span className="text-[13px] uppercase tracking-widest text-muted-foreground font-medium">
+        {title}{tip && <InfoTooltip text={tip} />}
+      </span>
       <span className={`text-[28px] leading-none font-light tabular-nums tracking-tight ${valueClass || 'text-foreground'}`}>{value}</span>
       {subtitle && <span className="text-[13px] text-muted-foreground tabular-nums font-medium">{subtitle}</span>}
     </div>
