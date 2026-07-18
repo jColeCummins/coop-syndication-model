@@ -48,7 +48,7 @@ A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limi
 
 ## Product (V5.3 — Limited-Equity Co-op Conversion)
 
-- Left sidebar: plain-language labels + tooltips on every input (UX-CONFIG-SPEC §2), 29 sliders + 4 switches (MFJ, Ohio BID, pref current-pay, REPS) in 5 groups incl. Grants & Subsidy (4 buckets by award probability, $0 = not awarded, soft-funding treatment, § 465 at-risk enforced); mobile: accordion toggle; state via useReducer
+- Left sidebar: plain-language labels + tooltips on every input (UX-CONFIG-SPEC §2), 34 sliders + 4 switches (MFJ, Ohio BID, pref current-pay, REPS) in 5 groups incl. Grants & Subsidy (4 buckets by award probability, $0 = not awarded, soft-funding treatment, § 465 at-risk enforced); mobile: accordion toggle; state via useReducer
 - Main view: 6-KPI strip + three data cards: Investor card now leads with a plain-English ROI band (capital in / Year-1 tax refund / effective capital at risk / total back); Seller (§ 170 max-absorbable-donation readout + expiry alert, deal geometry, annual cash & tax schedule with balloon/no-shield badges, 3-scenario cash-sale comparison), Investor (Y1 depreciation build-up, flow table w/ takeout row, exit economics + gain split by rate, IRR/EM/payback, optimal-when bullets), Tenant (rent triptych w/ annualized-drift framing, escalated Phase-1/Phase-2 revenue build-up with per-line escalator badges, note amortization)
 - Methodology footnote rendered from engine `METHODOLOGY` array
 
