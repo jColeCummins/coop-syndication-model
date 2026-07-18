@@ -76,7 +76,10 @@ export interface DealInputs {
   sellerOtherIncome: number;
   sellerOrdinaryRate: number;      // % federal marginal
   sellerFilingStatus: FilingStatus;
-  discountRate: number;            // % NPV discount
+  discountRate: number;            // % NPV discount = seller's after-tax reinvestment rate
+  comparisonHorizon: number;       // years, for the terminal-wealth "money in Year N" view
+  marketSaleCostPct: number;       // % broker + closing on an open-market cash sale
+  directDealCostPct: number;       // % legal/title on a direct sale to the co-op (no broker)
   // Deal Structure
   sellerDownPaymentPct: number;
   sellerInterestRate: number;
@@ -155,6 +158,9 @@ export const DEFAULT_INPUTS: DealInputs = {
   sellerOrdinaryRate: 24,
   sellerFilingStatus: 'mfj',
   discountRate: 5,
+  comparisonHorizon: 20,
+  marketSaleCostPct: 5.5,     // ~5% broker + ~0.5% closing on an open-market sale
+  directDealCostPct: 1.0,     // legal/title on a negotiated direct sale to the co-op
   sellerDownPaymentPct: 15,
   sellerInterestRate: 6,
   noteTermYears: 20,
@@ -252,8 +258,10 @@ export interface SellerYearRow {
 
 export interface SellerScenario {
   label: string;
-  nominalAfterTax: number;
-  npvAfterTax: number;
+  saleCosts: number;             // broker/legal/closing costs for this path
+  nominalAfterTax: number;       // undiscounted after-tax proceeds (net of costs)
+  npvAfterTax: number;           // discounted at the seller's after-tax reinvestment rate
+  terminalWealth: number;        // npvAfterTax grown to the comparison horizon at that rate
   totalTax: number;
 }
 
@@ -288,6 +296,10 @@ export interface SellerMetrics {
     installmentPlusDonation: SellerScenario;
     npvAdvantageVsCash: number;
     nominalAdvantageVsCash: number;
+    horizon: number;               // comparison horizon in years
+    upFrontTaxCashSale: number;    // tax due at closing in a lump cash sale
+    upFrontTaxNote: number;        // tax due in Year 1 of the installment note
+    deferredWorking: number;       // tax kept working inside the note vs a cash sale (Year 1)
   };
 }
 
@@ -414,6 +426,10 @@ export const TOOLTIPS = {
     'Long-term gains are taxed at 15% until income crosses ~$614k (married, 2026; ~$533k single), then 20%. Installments keep annual gain in the 15% bracket; a lump-sum sale pushes most of it to 20% + surtax.',
   noteVsCashKpi:
     'Compares the seller-financed note to selling the SAME bifurcated deal for cash — it holds the land donation fixed and isolates just the financing choice. This equals the third row minus the second row of the "Why Not Just Take Cash?" panel (Installment + donation − Cash sale + donation). Positive means the note nets more after-tax NPV than a cash sale of the improvements (6% interest, tax deferral, bracket-smoothing, NIIT avoidance, full § 170 absorption). It is NOT measured against the top row — a straight cash sale of the whole property — which nets more only because it keeps the donated land (that gap is the philanthropy, not the financing).',
+  terminalWealth:
+    'Answers "how are we really comparing these?" Instead of just discounting, it reinvests each path\'s entire after-tax cash stream at the seller\'s after-tax reinvestment rate (the discount-rate slider) and shows the wealth each leaves in the horizon year. This makes the reinvestment assumption explicit — it is exactly the scenario where the seller takes the cash-sale proceeds and invests them at that rate. It ranks paths identically to NPV (terminal = NPV × (1 + rate)^years); the point is to show the reinvestment head-to-head in plain dollars.',
+  saleCosts:
+    'Transaction costs. An open-market cash sale pays a broker + closing (~5–6%). The installment note and the cash-plus-donation deal are DIRECT sales to the co-op — no broker, just legal/title (~1%). On a $1.75M property the avoided broker commission alone is ~$90k, which is often larger than the NPV gap — a real, under-appreciated advantage of the direct structured deal.',
   discountRateAfterTax:
     'The NPV column discounts AFTER-TAX cash flows at the seller\'s after-tax opportunity cost (the "discount rate" slider). Read the 6% note coupon after tax: at ordinary rates it nets ~4.4%, so at a 5% after-tax discount the deferred principal loses a little present value each year — which is why the installment NPV sits below its nominal and only slightly above a bifurcated cash sale. Lower the discount rate toward a realistic after-tax alternative (3–4%) and the note wins decisively; the tax deferral, bracket-smoothing, and NIIT avoidance are on top of that.',
   exitTax:
@@ -694,6 +710,7 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
       soldAdjustedBasis,
       installmentFlows: schedule.map((r) => r.postTaxCash),
       installmentTaxTotal: schedule.reduce((a, r) => a + r.totalTax, 0),
+      installmentYear1Tax: schedule.length > 0 ? schedule[0].totalTax : 0,
       disc,
       ordRate,
       ltcgHigh,
@@ -789,6 +806,7 @@ interface ComparisonCtx {
   soldAdjustedBasis: number;
   installmentFlows: number[];
   installmentTaxTotal: number;
+  installmentYear1Tax: number;
   disc: number;
   ordRate: number;
   ltcgHigh: number;
@@ -830,25 +848,42 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
     return { draw, deduction };
   };
 
-  // Scenario 1: straight cash sale at FMV, no donation.
+  // Terminal wealth = reinvest a path's whole after-tax stream at the seller's
+  // after-tax reinvestment rate (the discount rate) to a common horizon. Since
+  // every flow is discounted at that same rate, terminal = NPV × (1+r)^H — so
+  // this is the same ranking as NPV, just expressed as "money in Year H", which
+  // makes the reinvestment assumption explicit (it directly answers "what if
+  // Paul invests the cash-sale proceeds at that rate instead?").
+  const H = inputs.comparisonHorizon;
+  const growth = Math.pow(1 + ctx.disc, H);
+  const mktCost = (inputs.marketSaleCostPct / 100) * inputs.totalFMV; // broker on a market sale
+  const directCost = (inputs.directDealCostPct / 100) * ctx.contractPrice; // legal/title, direct
+
+  // Scenario 1: straight OPEN-MARKET cash sale at FMV — pays a broker; the whole
+  // gain and the whole tax land at closing, so only the after-tax, after-cost
+  // lump is available to reinvest.
   const cashGain = Math.max(0, inputs.totalFMV - ctx.totalAdjustedBasis);
   const cashTax = lumpGainTax(cashGain, Math.min(ctx.clampedDepreciation, cashGain), 0);
+  const cashNet = inputs.totalFMV - cashTax - mktCost;
   const straightCash: SellerScenario = {
     label: 'Straight cash sale',
-    nominalAfterTax: inputs.totalFMV - cashTax,
-    npvAfterTax: inputs.totalFMV - cashTax,
+    saleCosts: mktCost,
+    nominalAfterTax: cashNet,
+    npvAfterTax: cashNet,
+    terminalWealth: cashNet * growth,
     totalTax: cashTax,
   };
 
-  // Scenario 2: donate land, sell improvements for cash in year 1.
+  // Scenario 2: donate land, sell improvements for cash in year 1 (DIRECT sale
+  // to the co-op — no broker, just legal/title).
   const bifGain = Math.max(0, ctx.contractPrice - ctx.soldAdjustedBasis);
   const unrecapCap = Math.min(ctx.clampedDepreciation, bifGain);
   const agiY1 = inputs.sellerOtherIncome + bifGain;
   const y1 = drawWithFloor(inputs.cltLandDonation, agiY1);
   const bifTaxY1 = lumpGainTax(bifGain, unrecapCap, y1.deduction);
   let carry = inputs.cltLandDonation - y1.draw;
-  let bifNominal = ctx.contractPrice - bifTaxY1;
-  let bifNpv = ctx.contractPrice - bifTaxY1;
+  let bifNominal = ctx.contractPrice - bifTaxY1 - directCost;
+  let bifNpv = ctx.contractPrice - bifTaxY1 - directCost;
   let bifTaxTotal = bifTaxY1;
   for (let year = 2; year <= T.CHARITY_USABLE_YEARS && carry > 0; year++) {
     const d = drawWithFloor(carry, inputs.sellerOtherIncome);
@@ -860,12 +895,16 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
   }
   const cashPlusDonation: SellerScenario = {
     label: 'Cash sale + CLT donation',
+    saleCosts: directCost,
     nominalAfterTax: bifNominal,
     npvAfterTax: bifNpv,
+    terminalWealth: bifNpv * growth,
     totalTax: bifTaxTotal,
   };
 
-  const instNominal = ctx.installmentFlows.reduce((a, b) => a + b, 0);
+  // Scenario 3: the installment note (DIRECT sale to the co-op). Direct legal/
+  // title cost is a closing-day (t0) charge against the Year-1 flow.
+  const instNominal = ctx.installmentFlows.reduce((a, b) => a + b, 0) - directCost;
   // Discount with Year 1 = t0, consistent with the two cash scenarios (whose
   // Year-1 proceeds — and the installment down payment — are received at
   // closing). The prior i+1 exponent discounted the installment's closing-day
@@ -873,11 +912,13 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
   const instNpv = ctx.installmentFlows.reduce(
     (acc, cf, i) => acc + cf / Math.pow(1 + ctx.disc, i),
     0,
-  );
+  ) - directCost;
   const installmentPlusDonation: SellerScenario = {
     label: 'Installment + CLT donation',
+    saleCosts: directCost,
     nominalAfterTax: instNominal,
     npvAfterTax: instNpv,
+    terminalWealth: instNpv * growth,
     totalTax: ctx.installmentTaxTotal,
   };
 
@@ -887,6 +928,10 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
     installmentPlusDonation,
     npvAdvantageVsCash: instNpv - straightCash.npvAfterTax,
     nominalAdvantageVsCash: instNominal - straightCash.nominalAfterTax,
+    horizon: H,
+    upFrontTaxCashSale: cashTax,
+    upFrontTaxNote: ctx.installmentFlows.length > 0 ? ctx.installmentYear1Tax : 0,
+    deferredWorking: Math.max(0, cashTax - (ctx.installmentYear1Tax || 0)),
   };
 }
 

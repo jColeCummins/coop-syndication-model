@@ -150,34 +150,48 @@ export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltip
             <thead className="bg-muted/50 text-muted-foreground border-b border-border">
               <tr>
                 <th className="py-3.5 px-4 font-medium text-left">Scenario</th>
+                <th className="py-3.5 px-4 font-medium">Sale Costs <InfoTooltip text={tooltips.saleCosts} /></th>
                 <th className="py-3.5 px-4 font-medium">Total Tax</th>
                 <th className="py-3.5 px-4 font-medium">Nominal After-Tax</th>
                 <th className="py-3.5 px-4 font-medium">NPV After-Tax @ {formatPercent(model.inputs.discountRate)}</th>
+                <th className="py-3.5 px-4 font-medium">Wealth in Yr {seller.comparison.horizon} <InfoTooltip text={tooltips.terminalWealth} /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {[seller.comparison.straightCash, seller.comparison.cashPlusDonation, seller.comparison.installmentPlusDonation].map((sc, i) => (
                 <tr key={sc.label} className={`hover:bg-muted/30 transition-colors ${i === 2 ? 'bg-muted/10 font-medium' : ''}`}>
                   <td className="py-3 px-4 text-left">{sc.label}{i === 2 && <span className="ml-2 px-1.5 py-0.5 rounded-sm bg-emerald-500/15 text-emerald-500 text-[8px] uppercase tracking-widest font-bold">This Deal</span>}</td>
+                  <td className="py-3 px-4 text-destructive">{sc.saleCosts > 0 ? formatCurrency(sc.saleCosts) : '—'}</td>
                   <td className="py-3 px-4 text-destructive">{formatCurrency(sc.totalTax)}</td>
                   <td className="py-3 px-4">{formatCurrency(sc.nominalAfterTax)}</td>
                   <td className="py-3.5 px-4 font-medium text-foreground">{formatCurrency(sc.npvAfterTax)}</td>
+                  <td className="py-3 px-4 font-medium text-foreground">{formatCurrency(sc.terminalWealth)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {/* Tax-deferral working-capital callout */}
+        <div className="px-4 py-3 border-t border-border bg-emerald-500/5 text-[14px] leading-relaxed text-muted-foreground">
+          <span className="text-foreground font-medium">Why the note keeps more capital working:</span>{' '}
+          a lump cash sale pays <span className="text-destructive">{formatCurrency(seller.comparison.upFrontTaxCashSale)}</span> of tax at closing, so only the rest is left to reinvest.
+          The note pays only <span className="text-foreground">{formatCurrency(seller.comparison.upFrontTaxNote)}</span> in Year 1 &mdash; leaving{' '}
+          <span className="text-emerald-500 font-medium">{formatCurrency(seller.comparison.deferredWorking)}</span> of deferred tax working inside the note at {formatPercent(model.inputs.sellerInterestRate)},
+          an interest-free loan from the IRS. That deferral is why the note can beat a cash sale even though its after-tax coupon sits near the discount rate.
+        </div>
+
         <div className="px-4 py-3 border-t border-border bg-muted/10 text-[14px] leading-relaxed text-muted-foreground space-y-1">
           <p>
-            The straight cash sale keeps the land ({formatCurrency(model.inputs.cltLandDonation)} of value) but concentrates the entire gain into one year &mdash;
-            triggering the 20% bracket, full NIIT exposure, and all unrecaptured &sect; 1250 tax at once.
-            Given the decision to donate the land to the CLT, the installment note adds{' '}
+            The straight cash sale keeps the land ({formatCurrency(model.inputs.cltLandDonation)} of value) but sells on the open market (a {formatPercent(model.inputs.marketSaleCostPct)} broker/closing cost)
+            and concentrates the entire gain into one year &mdash; triggering the 20% bracket, full NIIT, and all unrecaptured &sect; 1250 tax at once.
+            Given the decision to donate the land, the installment note adds{' '}
             <span className={seller.comparison.installmentPlusDonation.npvAfterTax >= seller.comparison.cashPlusDonation.npvAfterTax ? 'text-emerald-500' : 'text-destructive'}>
               {formatCurrency(seller.comparison.installmentPlusDonation.npvAfterTax - seller.comparison.cashPlusDonation.npvAfterTax)} NPV
             </span>{' '}
-            and {formatCurrency(seller.comparison.installmentPlusDonation.nominalAfterTax - seller.comparison.cashPlusDonation.nominalAfterTax)} nominal
-            versus taking the same bifurcated deal in cash &mdash; bracket smoothing, NIIT avoidance, {formatPercent(model.inputs.sellerInterestRate)} yield on carried principal,
-            and full absorption of the &sect; 170 carryforward against installment income.
+            ({formatCurrency(seller.comparison.installmentPlusDonation.terminalWealth - seller.comparison.cashPlusDonation.terminalWealth)} by Year {seller.comparison.horizon})
+            versus taking the same bifurcated deal in cash &mdash; a direct sale (no broker), bracket smoothing, NIIT avoidance, {formatPercent(model.inputs.sellerInterestRate)} yield on carried principal,
+            deferral, and full absorption of the &sect; 170 carryforward against installment income.
           </p>
         </div>
       </div>
