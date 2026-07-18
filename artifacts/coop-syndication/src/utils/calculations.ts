@@ -75,6 +75,7 @@ export interface DealInputs {
   noteTermYears: number;
   balloonYear: number;
   phase2CommercialRate: number;
+  phase2AmortYears: number;        // bank refinance term at buyout (own loan, own term)
   stateTaxRate: number;            // % flat state income tax (nonbusiness)
   localTaxRate: number;            // % municipal (net profits only)
   ohioBIDConfirmed: boolean;       // Ohio Business Income Deduction, CPA-confirmed
@@ -145,6 +146,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   noteTermYears: 20,
   balloonYear: 5,
   phase2CommercialRate: 7,
+  phase2AmortYears: 30,
   stateTaxRate: 2.75,
   localTaxRate: 1.5,
   ohioBIDConfirmed: true,
@@ -198,7 +200,7 @@ export const ESCALATORS = {
 export const DEAL_CONSTANTS = {
   BUILDING_RATIO: 0.75,          // building share of basis; land = 25%
   COST_SEG_SHORT_LIFE_PCT: 0.25, // mid-range for garden apartments (was 0.30)
-  REFI_AMORT_YEARS: 30,
+  REFI_AMORT_YEARS: 30,          // default only; the live term is inputs.phase2AmortYears
   RENT_CLIFF_THRESHOLD_PCT: 10,
   MAX_DONATION_PCT_OF_FMV: 0.40, // search ceiling for the § 170 optimizer
 } as const;
@@ -436,7 +438,7 @@ export const METHODOLOGY: string[] = [
   'Structure: the seller donates the 3.58-acre land parcel to a Community Land Trust (§ 170) and sells the improvements to the co-op syndicate on an installment note (§ 453). Contract price = FMV − donated land. Basis splits at the asset level: land basis follows the gift; the building\'s adjusted basis (depreciation clamped at the 75% building share of basis) offsets the sale. Exit at the buyout year is a fixed-formula purchase option in the CLT ground lease — unreturned capital + accrued unpaid preferred + balloon payoff; no appreciation participation.',
   'Seller tax: recognized gain = collected principal × gross profit ratio, 25%-rate unrecaptured § 1250 dollars first (Reg. § 1.453-12), then 15%/20% LTCG split at the 2026 filing-status breakpoint ($613,700 MFJ / $533,400 single). NIIT (3.8%) applies over $250k/$200k MAGI automatically. § 170: 30%-of-AGI annual limit, 0.5%-of-AGI OBBBA floor (disallowed amounts never carry), six usable years. Ohio: flat rate, no charitable deduction; with the CPA-confirmed toggle, the Business Income Deduction exempts the first $250k/yr and taxes the rest at 3%. Municipal tax cannot reach interest or gains (ORC 718).',
   'Investor: depreciable base = contract price + new CapEx; 100% bonus (§ 168(k)/OBBBA) on the 5/15-yr classes including a 25% cost-seg reclass; 27.5-yr straight line on the shell (full-year convention). REPS losses offset W-2 annually with a § 199A 20% deduction on positive years; passive losses suspend and release at the takeout (§ 469(g)). Exit tax: gain up to short-life depreciation × the negotiated exit-allocation % is ordinary income; the next tranche to total depreciation is 25%; the rest 15%; plus flat state on the gain. Ohio during the hold: BID zeroes profit-year state tax; without BID the 5/6 bonus addback applies. IRR/equity multiple/payback are post-tax.',
-  'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate annually (water/insurance 8%, taxes/management 3%, others 2.5%); Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, 30-yr amortization). The rent-cliff alert compares Phase 2 to Phase 1 on that basis.',
+  'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate annually (water/insurance 8%, taxes/management 3%, others 2.5%); Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, amortized over the configurable Phase-2 bank term, default 30 yr). The rent-cliff alert compares Phase 2 to Phase 1 on that basis.',
   'Defaults (July 2026 re-underwrite): FMV $1.25M as-is (in-place $700 rents, deferred maintenance, ~7% Class-C village cap; $1.5M is the stabilized number). Land donation $430k = the largest gift fully absorbed inside the § 170 window at these settings (30% of FMV absorbs with slack; 40% strands deduction). Basis $475k stepped-up story — confirm from the seller\'s Form 4562; a gift transfer means ~$250k carryover instead.',
   'Grants & subsidy: four buckets ordered by award probability (utility/weatherization rebates, county HOME/CHDO via the CLT, Ohio Housing Trust Fund, FHLB Cincinnati AHP), each $0 unless awarded, assumed committed at closing, and modeled as soft forgiven funding that replaces investor capital dollar-for-dollar — cutting the preferred return out of Phase-1 rents and shrinking the Phase-2 refinance. Compliance periods (HOME 20 yr, AHP 15 yr, OHTF ~15 yr) are recorded covenants, not cash flows; their rent/income limits sit at or above this model\'s cost-recovery rents, so they are compatible. CPA items: §61/§118 characterization (deferred-loan treatment assumed, basis intact) and Davis-Bacon exposure at 12+ HOME-assisted units.',
   '§ 465 at-risk limitation (enforced): the seller note is not qualified nonrecourse financing (§ 465(b)(6) excludes debt owed to the property\'s seller), so investors — REPS or not — deduct losses only up to cash invested; the excess suspends and releases against the exit gain. At the no-grant defaults the Year-1 loss sits just inside the at-risk cap; grant-funded scenarios push past it, and the model defers the excess rather than printing fictitious first-year savings.',
@@ -712,7 +714,7 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const phase2RefinanceBurden = burdenBeforeGrants - grantsAtBuyoutApplied;
   const refiRate = inputs.phase2CommercialRate / 100;
   const monthlyP2 =
-    phase2RefinanceBurden > 0 ? pmt(refiRate, D.REFI_AMORT_YEARS * 12, phase2RefinanceBurden) : 0;
+    phase2RefinanceBurden > 0 ? pmt(refiRate, inputs.phase2AmortYears * 12, phase2RefinanceBurden) : 0;
   const phase2AnnualDebtService = monthlyP2 * 12;
   const phase2AnnualRevenueReq = phase2AnnualDebtService + opexBuyoutYear.total;
   const phase2MonthlyRent = phase2AnnualRevenueReq / inputs.units / 12 / occupancy;

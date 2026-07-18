@@ -70,8 +70,8 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
             <tbody className="divide-y divide-border">
               <tr className="hover:bg-muted/30 transition-colors">
                 <td className="py-2.5 px-4 text-left">Annual Debt Service</td>
-                <td className="py-2.5 px-4">{formatCurrency(tenant.phase1AnnualDebtService)}</td>
-                <td className="py-2.5 px-4">{formatCurrency(tenant.phase2AnnualDebtService)}</td>
+                <td className="py-2.5 px-4">{formatCurrency(tenant.phase1AnnualDebtService)} <span className="text-[9px] text-muted-foreground ml-1">{inputs.sellerInterestRate}% seller note</span></td>
+                <td className="py-2.5 px-4">{formatCurrency(tenant.phase2AnnualDebtService)} <span className="text-[9px] text-muted-foreground ml-1">{inputs.phase2CommercialRate}% / {inputs.phase2AmortYears}yr bank</span></td>
               </tr>
               <OpexRow label="Property Taxes" v1={o1.propertyTaxes} v2={o2.propertyTaxes} esc={ESCALATORS.PROPERTY_TAX} />
               <OpexRow label="Insurance & Misc" v1={o1.insurance} v2={o2.insurance} esc={ESCALATORS.INSURANCE} />
