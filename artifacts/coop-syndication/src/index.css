@@ -62,17 +62,17 @@
   /* Zinc 800 */
   --card-border: 240 4% 16%;
   
+  /* Zinc 700 — brighter separators for older eyes */
+  --border: 240 4% 24%;
   /* Zinc 800 */
-  --border: 240 4% 16%;
-  /* Zinc 800 */
-  --input: 240 4% 16%;
-  /* Zinc 400 */
-  --ring: 240 5% 65%;
-  
+  --input: 240 4% 20%;
+  /* Zinc 300 */
+  --ring: 240 5% 75%;
+
   /* Zinc 800 */
   --muted: 240 4% 16%;
-  /* Zinc 400 */
-  --muted-foreground: 240 5% 65%;
+  /* Zinc 300 — higher contrast secondary text (was 65%) */
+  --muted-foreground: 240 5% 74%;
   
   /* Emerald 600 - keeping primary as an accent if needed, but we rely on explicit colors */
   --primary: 240 5% 96%;
@@ -109,5 +109,8 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    /* Comfortable base for reading-glasses legibility on a laptop. */
+    font-size: 15px;
+    line-height: 1.55;
   }
 }

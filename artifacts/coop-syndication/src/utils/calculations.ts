@@ -60,6 +60,14 @@ export interface DealInputs {
   utilitiesPerUnit: number;        // $/unit/yr, owner-paid, year-1 level
   reservesPerUnit: number;         // $/unit/yr, year-1 level
   cltGroundLeasePerUnit: number;   // $/unit/yr paid to the CLT for the land + stewardship
+  // Inflation & escalators — LONG-RUN AVERAGE %/yr, adjustable. Defaults are
+  // blends, not near-term spikes: e.g. utilities average the ordinance-locked
+  // 8% (through 2027) with a ~4% long-run tail, not 8% in perpetuity.
+  escUtilities: number;            // %/yr
+  escInsurance: number;            // %/yr
+  escPropertyTax: number;          // %/yr
+  escManagement: number;           // %/yr
+  escGeneral: number;              // %/yr — R&M, reserves, unspecified lines
   // Seller Profile
   totalFMV: number;
   originalCostBasis: number;
@@ -133,6 +141,12 @@ export const DEFAULT_INPUTS: DealInputs = {
   utilitiesPerUnit: 1150,
   reservesPerUnit: 400,
   cltGroundLeasePerUnit: 300, // ~$25/unit/mo stewardship fee; see TOOLTIPS.groundLease
+  // Blended long-run averages (was flat 8% for utilities/insurance in perpetuity):
+  escUtilities: 5.5,          // ~8% locked through 2027 tapering to ~4% (PFAS tail)
+  escInsurance: 5.0,          // habitational hard market softening from ~8%
+  escPropertyTax: 3.0,
+  escManagement: 3.0,
+  escGeneral: 2.5,
   totalFMV: 1250000,
   originalCostBasis: 475000,
   accumulatedDepreciation: 356250,
@@ -188,13 +202,17 @@ export const JURISDICTION = {
   MUNI_TAXES_INTANGIBLES: false, // ORC 718: interest/gains municipally exempt
 } as const;
 
+// GROUND_LEASE stays a fixed constant (a slow, affordability-held CLT
+// stewardship step, not a market-inflation line). The market-inflation
+// escalators are now adjustable inputs (esc* on DealInputs); the values here
+// are retained only as documentation of the prior defaults.
 export const ESCALATORS = {
-  UTILITIES: 0.08,               // YS ordinance-locked water increases; PFAS after
-  INSURANCE: 0.08,               // habitational hard market
-  PROPERTY_TAX: 0.03,            // levy growth + reappraisal cycle
-  MANAGEMENT: 0.03,              // replaces the one-time ×1.15 bump (1.03^5 ≈ 1.159)
+  UTILITIES: 0.055,              // now inputs.escUtilities (blended avg, was flat 0.08)
+  INSURANCE: 0.05,               // now inputs.escInsurance (was flat 0.08)
+  PROPERTY_TAX: 0.03,            // now inputs.escPropertyTax
+  MANAGEMENT: 0.03,              // now inputs.escManagement
   GROUND_LEASE: 0.015,           // CLT ground lease: slow CPI-style step, held low for affordability
-  GENERAL: 0.025,                // R&M, reserves fallback
+  GENERAL: 0.025,                // now inputs.escGeneral (R&M, reserves)
 } as const;
 
 export const DEAL_CONSTANTS = {
@@ -438,7 +456,7 @@ export const METHODOLOGY: string[] = [
   'Structure: the seller donates the 3.58-acre land parcel to a Community Land Trust (§ 170) and sells the improvements to the co-op syndicate on an installment note (§ 453). Contract price = FMV − donated land. Basis splits at the asset level: land basis follows the gift; the building\'s adjusted basis (depreciation clamped at the 75% building share of basis) offsets the sale. Exit at the buyout year is a fixed-formula purchase option in the CLT ground lease — unreturned capital + accrued unpaid preferred + balloon payoff; no appreciation participation.',
   'Seller tax: recognized gain = collected principal × gross profit ratio, 25%-rate unrecaptured § 1250 dollars first (Reg. § 1.453-12), then 15%/20% LTCG split at the 2026 filing-status breakpoint ($613,700 MFJ / $533,400 single). NIIT (3.8%) applies over $250k/$200k MAGI automatically. § 170: 30%-of-AGI annual limit, 0.5%-of-AGI OBBBA floor (disallowed amounts never carry), six usable years. Ohio: flat rate, no charitable deduction; with the CPA-confirmed toggle, the Business Income Deduction exempts the first $250k/yr and taxes the rest at 3%. Municipal tax cannot reach interest or gains (ORC 718).',
   'Investor: depreciable base = contract price + new CapEx; 100% bonus (§ 168(k)/OBBBA) on the 5/15-yr classes including a 25% cost-seg reclass; 27.5-yr straight line on the shell (full-year convention). REPS losses offset W-2 annually with a § 199A 20% deduction on positive years; passive losses suspend and release at the takeout (§ 469(g)). Exit tax: gain up to short-life depreciation × the negotiated exit-allocation % is ordinary income; the next tranche to total depreciation is 25%; the rest 15%; plus flat state on the gain. Ohio during the hold: BID zeroes profit-year state tax; without BID the 5/6 bonus addback applies. IRR/equity multiple/payback are post-tax.',
-  'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate annually (water/insurance 8%, taxes/management 3%, others 2.5%); Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, amortized over the configurable Phase-2 bank term, default 30 yr). The rent-cliff alert compares Phase 2 to Phase 1 on that basis.',
+  'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate at adjustable long-run AVERAGE rates (defaults: utilities 5.5%, insurance 5%, taxes/management 3%, others 2.5% — blends, not the near-term 8% ordinance/hard-market spikes); Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, amortized over the configurable Phase-2 bank term, default 30 yr). The rent-cliff alert compares Phase 2 to Phase 1 on that basis.',
   'Defaults (July 2026 re-underwrite): FMV $1.25M as-is (in-place $700 rents, deferred maintenance, ~7% Class-C village cap; $1.5M is the stabilized number). Land donation $430k = the largest gift fully absorbed inside the § 170 window at these settings (30% of FMV absorbs with slack; 40% strands deduction). Basis $475k stepped-up story — confirm from the seller\'s Form 4562; a gift transfer means ~$250k carryover instead.',
   'Grants & subsidy: four buckets ordered by award probability (utility/weatherization rebates, county HOME/CHDO via the CLT, Ohio Housing Trust Fund, FHLB Cincinnati AHP), each $0 unless awarded, assumed committed at closing, and modeled as soft forgiven funding that replaces investor capital dollar-for-dollar — cutting the preferred return out of Phase-1 rents and shrinking the Phase-2 refinance. Compliance periods (HOME 20 yr, AHP 15 yr, OHTF ~15 yr) are recorded covenants, not cash flows; their rent/income limits sit at or above this model\'s cost-recovery rents, so they are compatible. CPA items: §61/§118 characterization (deferred-loan treatment assumed, basis intact) and Davis-Bacon exposure at 12+ HOME-assisted units.',
   '§ 465 at-risk limitation (enforced): the seller note is not qualified nonrecourse financing (§ 465(b)(6) excludes debt owed to the property\'s seller), so investors — REPS or not — deduct losses only up to cash invested; the excess suspends and releases against the exit gain. At the no-grant defaults the Year-1 loss sits just inside the at-risk cap; grant-funded scenarios push past it, and the model defers the excess rather than printing fictitious first-year savings.',
@@ -454,15 +472,15 @@ const escalate = (base: number, rate: number, year: number) =>
   base * Math.pow(1 + rate, year - 1);
 
 function opexAt(inputs: DealInputs, year: number): OpexBreakdown {
-  const E = ESCALATORS;
+  const gen = inputs.escGeneral / 100;
   const b = {
-    propertyTaxes: escalate(inputs.propertyTaxes, E.PROPERTY_TAX, year),
-    insurance: escalate(inputs.annualInsuranceMisc, E.INSURANCE, year),
-    mgmt: escalate(inputs.mgmtFeePerDoor * inputs.units * 12, E.MANAGEMENT, year),
-    repairsMaint: escalate(inputs.repairsMaintPerUnit * inputs.units, E.GENERAL, year),
-    utilities: escalate(inputs.utilitiesPerUnit * inputs.units, E.UTILITIES, year),
-    reserves: escalate(inputs.reservesPerUnit * inputs.units, E.GENERAL, year),
-    groundLease: escalate(inputs.cltGroundLeasePerUnit * inputs.units, E.GROUND_LEASE, year),
+    propertyTaxes: escalate(inputs.propertyTaxes, inputs.escPropertyTax / 100, year),
+    insurance: escalate(inputs.annualInsuranceMisc, inputs.escInsurance / 100, year),
+    mgmt: escalate(inputs.mgmtFeePerDoor * inputs.units * 12, inputs.escManagement / 100, year),
+    repairsMaint: escalate(inputs.repairsMaintPerUnit * inputs.units, gen, year),
+    utilities: escalate(inputs.utilitiesPerUnit * inputs.units, inputs.escUtilities / 100, year),
+    reserves: escalate(inputs.reservesPerUnit * inputs.units, gen, year),
+    groundLease: escalate(inputs.cltGroundLeasePerUnit * inputs.units, ESCALATORS.GROUND_LEASE, year),
   };
   return {
     ...b,

@@ -8,7 +8,7 @@ export function KPIStrip({ model }: { model: DealMetrics }) {
   const npvAdv = model.seller.comparison.installmentPlusDonation.npvAfterTax
     - model.seller.comparison.cashPlusDonation.npvAfterTax;
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
       <KPICard
         title="Seller Y1 Headroom"
         value={formatCurrency(hr)}
@@ -48,12 +48,10 @@ export function KPIStrip({ model }: { model: DealMetrics }) {
 
 function KPICard({ title, value, subtitle, valueClass }: { title: string, value: string, subtitle?: string, valueClass?: string }) {
   return (
-    <div className="bg-card border border-border p-4 rounded-md flex flex-col justify-center space-y-1">
-      <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">{title}</span>
-      <div className="flex items-baseline space-x-2">
-        <span className={`text-2xl font-light tabular-nums tracking-tight ${valueClass || 'text-foreground'}`}>{value}</span>
-        {subtitle && <span className="text-[10px] text-muted-foreground tabular-nums font-medium">{subtitle}</span>}
-      </div>
+    <div className="bg-card border border-border px-5 py-4 rounded-md flex flex-col justify-center gap-1.5">
+      <span className="text-[13px] uppercase tracking-widest text-muted-foreground font-medium">{title}</span>
+      <span className={`text-[28px] leading-none font-light tabular-nums tracking-tight ${valueClass || 'text-foreground'}`}>{value}</span>
+      {subtitle && <span className="text-[13px] text-muted-foreground tabular-nums font-medium">{subtitle}</span>}
     </div>
   );
 }
