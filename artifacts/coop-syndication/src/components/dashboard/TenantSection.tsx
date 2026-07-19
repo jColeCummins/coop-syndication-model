@@ -10,6 +10,22 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
   const o1 = tenant.opexYear1;
   const o2 = tenant.opexBuyoutYear;
   const p2Year = inputs.balloonYear + 1;
+  // Property-tax abatement status per phase (Phase 1 uses Year-1 costs, Phase 2
+  // uses Year-(balloonYear+1) costs). A badge on the tax line makes the relief —
+  // and its expiry between phases — visible where it lands in the rent.
+  const abatePct = inputs.propertyTaxAbatementPct;
+  const abateYears = inputs.propertyTaxAbatementYears;
+  const abateOn = abatePct > 0 && abateYears >= 1;
+  const phase1Abated = abateOn; // Year 1 is always inside a term of >= 1 year
+  const phase2Abated = abateOn && p2Year <= abateYears;
+  const taxBadge1 = phase1Abated
+    ? <span className="text-[12px] text-emerald-500 ml-1">&minus;{abatePct}% abated</span>
+    : undefined;
+  const taxBadge2 = phase2Abated
+    ? <span className="text-[12px] text-emerald-500 ml-1">&minus;{abatePct}% abated</span>
+    : abateOn
+      ? <span className="text-[12px] text-amber-500 ml-1">abatement expired</span>
+      : undefined;
   // The Phase-2 jump accumulates over the whole Phase-1 period — show the
   // equivalent annual drift so a 5-year 12% move reads as ~2.4%/yr, not a cliff.
   const annualizedJump =
@@ -73,7 +89,7 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
                 <td className="py-3 px-4">{formatCurrency(tenant.phase1AnnualDebtService)} <span className="text-[12px] text-muted-foreground ml-1">{inputs.sellerInterestRate}% seller note</span></td>
                 <td className="py-3 px-4">{formatCurrency(tenant.phase2AnnualDebtService)} <span className="text-[12px] text-muted-foreground ml-1">{inputs.phase2CommercialRate}% / {inputs.phase2AmortYears}yr bank</span></td>
               </tr>
-              <OpexRow label="Property Taxes" v1={o1.propertyTaxes} v2={o2.propertyTaxes} esc={inputs.escPropertyTax / 100} />
+              <OpexRow label="Property Taxes" v1={o1.propertyTaxes} v2={o2.propertyTaxes} esc={inputs.escPropertyTax / 100} badge1={taxBadge1} badge2={taxBadge2} />
               <OpexRow label="Insurance & Misc" v1={o1.insurance} v2={o2.insurance} esc={inputs.escInsurance / 100} />
               <OpexRow label="Management" v1={o1.mgmt} v2={o2.mgmt} esc={inputs.escManagement / 100} />
               <OpexRow label="Repairs & Maintenance" v1={o1.repairsMaint} v2={o2.repairsMaint} esc={inputs.escGeneral / 100} />
@@ -150,13 +166,13 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
   );
 }
 
-function OpexRow({ label, v1, v2, esc }: { label: string; v1: number; v2: number; esc: number }) {
+function OpexRow({ label, v1, v2, esc, badge1, badge2 }: { label: string; v1: number; v2: number; esc: number; badge1?: React.ReactNode; badge2?: React.ReactNode }) {
   return (
     <tr className="hover:bg-muted/30 transition-colors">
       <td className="py-3 px-4 text-left">{label}</td>
-      <td className="py-3 px-4">{formatCurrency(v1)}</td>
+      <td className="py-3 px-4">{formatCurrency(v1)}{badge1}</td>
       <td className="py-3 px-4">
-        {formatCurrency(v2)} <span className="text-[12px] text-muted-foreground ml-1">+{(esc * 100).toFixed(1)}%/yr</span>
+        {formatCurrency(v2)} <span className="text-[12px] text-muted-foreground ml-1">+{(esc * 100).toFixed(1)}%/yr</span>{badge2}
       </td>
     </tr>
   );

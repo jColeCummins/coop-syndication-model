@@ -68,6 +68,12 @@ export interface DealInputs {
   escPropertyTax: number;          // %/yr
   escManagement: number;           // %/yr
   escGeneral: number;              // %/yr — R&M, reserves, unspecified lines
+  // Property-tax abatement — a CRA / restricted-rent-valuation reduction on the
+  // property-tax LINE ONLY (does not touch the seller note or investor basis).
+  // 0% = not yet won / off. When active it lowers tenant rent for the term, then
+  // the full escalated tax snaps back in the first post-abatement year.
+  propertyTaxAbatementPct: number;   // % reduction of the property-tax line, 0–100
+  propertyTaxAbatementYears: number; // term of years the reduction applies (from Y1)
   // Seller Profile
   totalFMV: number;
   originalCostBasis: number;
@@ -150,6 +156,8 @@ export const DEFAULT_INPUTS: DealInputs = {
   escPropertyTax: 3.0,
   escManagement: 3.0,
   escGeneral: 2.5,
+  propertyTaxAbatementPct: 0,   // off by default — abatement is applied for, not assumed
+  propertyTaxAbatementYears: 12, // typical Ohio CRA term for residential rehab
   totalFMV: 1250000,
   originalCostBasis: 475000,
   accumulatedDepreciation: 356250,
@@ -454,6 +462,8 @@ export const TOOLTIPS = {
     'ON: investors are paid their return each year from rents. OFF: the return accrues and is paid at the buyout instead — Phase-1 rents drop by the pref amount, and the buyout loan grows by the accrued total. Same investor economics, shifted in time; this is the tenant-affordability relief valve.',
   escalators:
     'Operating costs inflate: water/sewer 8%/yr (village ordinance through 2027, PFAS pressure after), insurance 8%/yr, property taxes and management 3%/yr, other lines 2.5%/yr. Phase-2 rent is computed on buyout-year costs — flat-cost models understate it badly.',
+  propertyTaxAbatement:
+    'A negotiated reduction of the property-tax LINE ONLY for a set term — it lowers tenant rent while it runs and touches nothing on the seller or investor side. 0% = not yet won. Two realistic Ohio paths: (1) a Community Reinvestment Area abatement (ORC 3735.65) on the renovation value — municipality-designated, commonly 10–15 years, up to 100% of the improvement\'s added value; the co-op applies after the rehab is placed in service. (2) A restricted-rent / income-approach valuation at the county auditor (ORC 5713.03; Ohio Admin. Code 5703-25-20, eff. 1/1/2026, for federally-subsidized housing), which values the property on its actually-collectible at-cost rents rather than market comps — appealed to the Board of Revision under ORC 5715.19 if the auditor won\'t grant it. Model it as a haircut on the tax line for the years you expect it to hold, then it snaps back to full escalated tax. Applies to the property-tax component of both Phase-1 and Phase-2 rent (Phase 2 only if the buyout year is still inside the term). Do not underwrite closing on an abatement that has not been granted.',
   maxDonation:
     'The largest land gift the seller can fully deduct within the six-year window at the current settings, holding everything else fixed. Larger gifts strand deduction (it expires); the appraisal, not this number, determines what the gift is actually worth.',
   basisFork:
@@ -474,7 +484,7 @@ export const METHODOLOGY: string[] = [
   'Structure: the seller donates the 3.58-acre land parcel to a Community Land Trust (§ 170) and sells the improvements to the co-op syndicate on an installment note (§ 453). Contract price = FMV − donated land. Basis splits at the asset level: land basis follows the gift; the building\'s adjusted basis (depreciation clamped at the 75% building share of basis) offsets the sale. Exit at the buyout year is a fixed-formula purchase option in the CLT ground lease — unreturned capital + accrued unpaid preferred + balloon payoff; no appreciation participation.',
   'Seller tax: recognized gain = collected principal × gross profit ratio, 25%-rate unrecaptured § 1250 dollars first (Reg. § 1.453-12), then 15%/20% LTCG split at the 2026 filing-status breakpoint ($613,700 MFJ / $533,400 single). NIIT (3.8%) applies over $250k/$200k MAGI automatically. § 170: 30%-of-AGI annual limit, 0.5%-of-AGI OBBBA floor (disallowed amounts never carry), six usable years. Ohio: flat rate, no charitable deduction; with the CPA-confirmed toggle, the Business Income Deduction exempts the first $250k/yr and taxes the rest at 3%. Municipal tax cannot reach interest or gains (ORC 718).',
   'Investor: depreciable base = contract price + new CapEx; 100% bonus (§ 168(k)/OBBBA) on the 5/15-yr classes including a 25% cost-seg reclass; 27.5-yr straight line on the shell (full-year convention). REPS losses offset W-2 annually with a § 199A 20% deduction on positive years; passive losses suspend and release at the takeout (§ 469(g)). Exit tax: gain up to short-life depreciation × the negotiated exit-allocation % is ordinary income; the next tranche to total depreciation is 25%; the rest 15%; plus flat state on the gain. Ohio during the hold: BID zeroes profit-year state tax; without BID the 5/6 bonus addback applies. IRR/equity multiple/payback are post-tax.',
-  'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate at adjustable long-run AVERAGE rates (defaults: utilities 5.5%, insurance 5%, taxes/management 3%, others 2.5% — blends, not the near-term 8% ordinance/hard-market spikes); Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, amortized over the configurable Phase-2 bank term, default 30 yr). The rent-cliff alert compares Phase 2 to Phase 1 on that basis.',
+  'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate at adjustable long-run AVERAGE rates (defaults: utilities 5.5%, insurance 5%, taxes/management 3%, others 2.5% — blends, not the near-term 8% ordinance/hard-market spikes); an optional CRA / restricted-rent property-tax abatement (off by default) haircuts the tax line for a set term and reverts to full escalated tax after. Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, amortized over the configurable Phase-2 bank term, default 30 yr). The rent-cliff alert compares Phase 2 to Phase 1 on that basis — an abatement expiring between the phases widens that cliff.',
   'Defaults (July 2026 re-underwrite): FMV $1.25M as-is (in-place $700 rents, deferred maintenance, ~7% Class-C village cap; $1.5M is the stabilized number). Land donation $430k = the largest gift fully absorbed inside the § 170 window at these settings (30% of FMV absorbs with slack; 40% strands deduction). Basis $475k stepped-up story — confirm from the seller\'s Form 4562; a gift transfer means ~$250k carryover instead.',
   'Grants & subsidy: four buckets ordered by award probability (utility/weatherization rebates, county HOME/CHDO via the CLT, Ohio Housing Trust Fund, FHLB Cincinnati AHP), each $0 unless awarded, assumed committed at closing, and modeled as soft forgiven funding that replaces investor capital dollar-for-dollar — cutting the preferred return out of Phase-1 rents and shrinking the Phase-2 refinance. Compliance periods (HOME 20 yr, AHP 15 yr, OHTF ~15 yr) are recorded covenants, not cash flows; their rent/income limits sit at or above this model\'s cost-recovery rents, so they are compatible. CPA items: §61/§118 characterization (deferred-loan treatment assumed, basis intact) and Davis-Bacon exposure at 12+ HOME-assisted units.',
   '§ 465 at-risk limitation (enforced): the seller note is not qualified nonrecourse financing (§ 465(b)(6) excludes debt owed to the property\'s seller), so investors — REPS or not — deduct losses only up to cash invested; the excess suspends and releases against the exit gain. At the no-grant defaults the Year-1 loss sits just inside the at-risk cap; grant-funded scenarios push past it, and the model defers the excess rather than printing fictitious first-year savings.',
@@ -491,8 +501,13 @@ const escalate = (base: number, rate: number, year: number) =>
 
 function opexAt(inputs: DealInputs, year: number): OpexBreakdown {
   const gen = inputs.escGeneral / 100;
+  // CRA / restricted-rent abatement reduces the property-tax line for its term,
+  // applied AFTER escalation so the abated years still track underlying valuation
+  // growth. Year is 1-based, so the term covers years 1..propertyTaxAbatementYears.
+  const abatementActive = year <= inputs.propertyTaxAbatementYears;
+  const abatementFactor = abatementActive ? 1 - inputs.propertyTaxAbatementPct / 100 : 1;
   const b = {
-    propertyTaxes: escalate(inputs.propertyTaxes, inputs.escPropertyTax / 100, year),
+    propertyTaxes: escalate(inputs.propertyTaxes, inputs.escPropertyTax / 100, year) * abatementFactor,
     insurance: escalate(inputs.annualInsuranceMisc, inputs.escInsurance / 100, year),
     mgmt: escalate(inputs.mgmtFeePerDoor * inputs.units * 12, inputs.escManagement / 100, year),
     repairsMaint: escalate(inputs.repairsMaintPerUnit * inputs.units, gen, year),
