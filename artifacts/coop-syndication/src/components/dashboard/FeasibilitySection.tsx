@@ -44,6 +44,26 @@ export function FeasibilitySection({ model, tooltips }: { model: DealMetrics; to
         </div>
       </div>
 
+      {/* Valuation cross-check — the restricted-income reality test */}
+      <div className={`rounded-md border p-4 text-[13px] ${
+        f.valuationOptimism > 1.15 ? 'bg-destructive/10 border-destructive text-destructive' : 'bg-card border-border text-muted-foreground'
+      }`}>
+        <span className="font-semibold text-foreground">Valuation cross-check.</span>{' '}
+        Phase-2 net operating income of {formatCurrency(f.phase2NOI)} at a {formatPercent(inputs.exitCapRate)} cap rate
+        supports an income-approach value of{' '}
+        <span className="text-foreground tabular-nums">{formatCurrency(f.incomeApproachValue)}</span>.{' '}
+        {f.valueIsDerived ? (
+          <>That derived figure is what the loan-to-value test uses &mdash; the defensible basis for a property
+          encumbered by a ground lease and at-cost rents.</>
+        ) : (
+          <>You have overridden it with {formatCurrency(f.stabilizedValue)}, which implies a{' '}
+          <span className="text-foreground tabular-nums">{formatPercent(f.impliedCapRate * 100)}</span> cap rate
+          {f.valuationOptimism > 1.15
+            ? ` — ${(f.valuationOptimism).toFixed(2)}× the income-approach value. A takeout appraiser valuing restricted rents will not reach it, and the same suppressed income you cite to the county auditor caps what the bank will lend.`
+            : ' — consistent with the income approach.'}</>
+        )}
+      </div>
+
       {/* The two lender tests */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <TestCard
@@ -51,7 +71,7 @@ export function FeasibilitySection({ model, tooltips }: { model: DealMetrics; to
           pass={f.ltvPass}
           actual={formatPercent(f.ltv * 100)}
           limit={`max ${formatPercent(f.maxLtv * 100)}`}
-          detail={`${formatCurrency(f.refinanceBurden)} against ${formatCurrency(f.stabilizedValue)} stabilized value`}
+          detail={`${formatCurrency(f.refinanceBurden)} against ${formatCurrency(f.stabilizedValue)} ${f.valueIsDerived ? 'income-approach value' : 'appraisal override'}`}
           supports={f.maxLoanByLtv}
           binding={f.bindingConstraint === 'ltv'}
         />

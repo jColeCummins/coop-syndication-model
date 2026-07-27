@@ -96,7 +96,14 @@ export interface DealInputs {
   surplusToPrincipalPct: number;     // % of surplus → extra seller-note principal
   surplusToReservesPct: number;      // % of surplus → capital reserve account
   // Phase-2 financing feasibility — the takeout test the model used to skip.
-  stabilizedValue: number;           // $ post-renovation appraised value, for LTV
+  // Stabilized value for the LTV test. 0 = DERIVE IT from the restricted
+  // income approach (Phase-2 NOI ÷ exitCapRate) rather than assert a market
+  // number. Deriving is the honest default: a property encumbered by a ground
+  // lease and at-cost rents is appraised on the income it can actually collect,
+  // and the same restricted income that wins a property-tax reduction also
+  // caps what a lender will advance. See ANALYSIS.md A.21.
+  stabilizedValue: number;           // $ override; 0 = use the income approach
+  exitCapRate: number;               // % cap rate for the income-approach value
   maxLtvPct: number;                 // lender's max loan-to-value
   minDscr: number;                   // lender's min debt-service coverage ratio
   // Member share capital. Replaces investor capital 1:1 and earns NO preferred
@@ -192,7 +199,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   annualInsuranceMisc: 22500,
   mgmtFeePerDoor: 50,
   repairsMaintPerUnit: 1200,
-  utilitiesPerUnit: 1150,
+  utilitiesPerUnit: 1500,
   reservesPerUnit: 400,
   cltGroundLeasePerUnit: 300, // ~$25/unit/mo stewardship fee; see TOOLTIPS.groundLease
   // Blended long-run averages (was flat 8% for utilities/insurance in perpetuity):
@@ -210,7 +217,8 @@ export const DEFAULT_INPUTS: DealInputs = {
   policyMonthlyRent: 700,       // today's rent — tenants see no increase
   surplusToPrincipalPct: 60,    // extra principal shrinks the Year-5 takeout
   surplusToReservesPct: 25,     // 1968 building; lenders escrow reserves anyway
-  stabilizedValue: 1450000,     // post-renovation value; CONFIRM WITH APPRAISAL
+  stabilizedValue: 0,           // 0 = derive from restricted income; override only with a real appraisal
+  exitCapRate: 7.0,             // Class-C garden apartment, Yellow Springs
   maxLtvPct: 75,                // co-op blanket loans often stricter — see tooltip
   minDscr: 1.2,
   // $2,000 chosen deliberately BELOW the $3,500 Greenmont benchmark
@@ -484,7 +492,11 @@ export interface MemberEquityPlan {
  * target, sized rather than guessed.
  */
 export interface FeasibilityMetrics {
-  stabilizedValue: number;
+  stabilizedValue: number;         // the value actually used in the LTV test
+  incomeApproachValue: number;     // Phase-2 NOI ÷ exitCapRate
+  valueIsDerived: boolean;         // true when no override was supplied
+  impliedCapRate: number;          // NOI ÷ the value used — sanity check on an override
+  valuationOptimism: number;       // override ÷ income-approach value (1 = consistent)
   refinanceBurden: number;
   ltv: number;
   maxLtv: number;
@@ -625,7 +637,9 @@ export const TOOLTIPS = {
   feasibility:
     'Can the co-op actually GET the Year-5 loan? Two tests, and the loan is the smaller of what each allows. LTV: the loan cannot exceed the lender\'s share of appraised value — note that co-op blanket mortgages are underwritten more conservatively than conventional multifamily, because a lender cannot easily foreclose and reposition an occupied limited-equity co-op, so do not assume a 75-80% conventional advance. DSCR: net operating income must exceed debt service by the lender\'s margin (1.20-1.25x typical). Under pure cost-recovery rent, DSCR pins at exactly 1.00 by construction — that is the honest finding, not a rounding artifact. Any FINANCING GAP shown is the dollar amount the deal must close with grants, member equity, a longer seller note, or a smaller investor check. This is the deal\'s single largest risk and earlier versions did not test it at all.',
   stabilizedValue:
-    'The post-renovation appraised value the Phase-2 lender will underwrite against — NOT today\'s as-is value and NOT the purchase price. It must be supported by an appraisal at refinance. Two cautions specific to this deal: the CLT ground lease means the co-op owns improvements on leased land, which some appraisers value below fee simple; and restricted, at-cost rents produce a lower income-approach value than market comps would. A conservative number here is a feature, not pessimism.',
+    'THE VALUATION PARADOX — the sharpest criticism this model has received, and it is legitimate. You cannot claim a suppressed value at the county auditor to cut property taxes (A.15) and a market value at the bank to support the takeout. A property encumbered by a CLT ground lease and at-cost rents gets appraised on the income it can ACTUALLY collect, so the same restriction that wins the tax reduction also caps the loan. Leave this at $0 and the model DERIVES the value from Phase-2 net operating income at the cap rate below, which is the defensible number. Enter an override only when you hold a real appraisal — and watch the implied cap rate the dashboard reports back: an override that implies a sub-5% cap on a Class-C 1968 garden apartment in a village of 3,700 will not survive a lender review, however attractive it makes the LTV look. Two further haircuts a takeout appraiser may apply: the co-op owns improvements on LEASED land, which some appraisers value below fee simple, and a limited-equity resale formula caps the upside a buyer would pay for.',
+  exitCapRate:
+    'The capitalization rate a takeout appraiser would apply to this property\'s restricted net operating income. Value = NOI ÷ cap rate, so a HIGHER cap rate means a LOWER value and less loan capacity. 6.5–7.5% is the honest band for a Class-C 1968 garden apartment in a small Ohio village; 7% is the default. This is the single most consequential assumption in the feasibility test — moving it from 6.5% to 7.5% cuts the appraised value by roughly 13% and can flip the binding constraint from coverage to loan-to-value.',
   shadowEquity:
     'Tenants paying above the cost floor are contributing real capital, and recognizing that is fair. This tracks the accumulated credit. Keep it non-redeemable or deeply capped and vest it over years: a cash-redemption right turns member recognition into a liability that reduces what a lender will advance, and may conflict with the ground lease\'s resale formula. Recognition and retention benefits carry most of the fairness at none of the financing cost.',
   propertyTaxAbatement:
@@ -1083,16 +1097,31 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const dscr = phase2AnnualDebtService > 0 ? phase2NOI / phase2AnnualDebtService : Infinity;
   const phase1Dscr =
     phase1AnnualDebtService > 0 ? phase1NOI / phase1AnnualDebtService : Infinity;
-  const maxLoanByLtv = inputs.stabilizedValue * (inputs.maxLtvPct / 100);
+  // THE VALUATION CROSS-CHECK. A property encumbered by a ground lease and
+  // at-cost rents is appraised on the income it can actually collect. The same
+  // restricted income that wins a property-tax reduction (A.15) also caps what
+  // a takeout lender will advance — you cannot claim a suppressed value at the
+  // auditor and a market value at the bank. Default derives the value; an
+  // override is allowed but its implied cap rate is reported so an
+  // indefensible number cannot hide.
+  const capRate = Math.max(0.0001, inputs.exitCapRate / 100);
+  const incomeApproachValue = Math.max(0, phase2NOI) / capRate;
+  const valueIsDerived = inputs.stabilizedValue <= 0;
+  const valueForLtv = valueIsDerived ? incomeApproachValue : inputs.stabilizedValue;
+  const maxLoanByLtv = valueForLtv * (inputs.maxLtvPct / 100);
   const maxLoanByDscr =
     inputs.minDscr > 0 && phase2NOI > 0
       ? pvOfAnnuity(refiRate, inputs.phase2AmortYears * 12, phase2NOI / inputs.minDscr / 12)
       : 0;
   const supportableLoan = Math.max(0, Math.min(maxLoanByLtv, maxLoanByDscr));
   const feasibility: FeasibilityMetrics = {
-    stabilizedValue: inputs.stabilizedValue,
+    stabilizedValue: valueForLtv,
+    incomeApproachValue,
+    valueIsDerived,
+    impliedCapRate: valueForLtv > 0 ? phase2NOI / valueForLtv : 0,
+    valuationOptimism: incomeApproachValue > 0 ? valueForLtv / incomeApproachValue : 1,
     refinanceBurden: phase2RefinanceBurden,
-    ltv: inputs.stabilizedValue > 0 ? phase2RefinanceBurden / inputs.stabilizedValue : 0,
+    ltv: valueForLtv > 0 ? phase2RefinanceBurden / valueForLtv : 0,
     maxLtv: inputs.maxLtvPct / 100,
     ltvPass: phase2RefinanceBurden <= maxLoanByLtv + 0.5,
     phase2NOI,
