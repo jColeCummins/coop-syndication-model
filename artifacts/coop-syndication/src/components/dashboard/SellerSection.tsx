@@ -152,6 +152,7 @@ export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltip
                 <th className="py-3.5 px-4 font-medium text-left">Scenario</th>
                 <th className="py-3.5 px-4 font-medium">Sale Costs <InfoTooltip text={tooltips.saleCosts} /></th>
                 <th className="py-3.5 px-4 font-medium">Total Tax</th>
+                <th className="py-3.5 px-4 font-medium">Cash at Closing <InfoTooltip text={tooltips.cashAtClosing} /></th>
                 <th className="py-3.5 px-4 font-medium">Nominal After-Tax</th>
                 <th className="py-3.5 px-4 font-medium">NPV After-Tax @ {formatPercent(model.inputs.discountRate)}</th>
                 <th className="py-3.5 px-4 font-medium">Wealth in Yr {seller.comparison.horizon} <InfoTooltip text={tooltips.terminalWealth} /></th>
@@ -163,6 +164,7 @@ export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltip
                   <td className="py-3 px-4 text-left">{sc.label}{i === 2 && <span className="ml-2 px-1.5 py-0.5 rounded-sm bg-emerald-500/15 text-emerald-500 text-[8px] uppercase tracking-widest font-bold">This Deal</span>}</td>
                   <td className="py-3 px-4 text-destructive">{sc.saleCosts > 0 ? formatCurrency(sc.saleCosts) : '—'}</td>
                   <td className="py-3 px-4 text-destructive">{formatCurrency(sc.totalTax)}</td>
+                  <td className="py-3 px-4 font-medium text-amber-500">{formatCurrency(sc.cashAtClosing)}</td>
                   <td className="py-3 px-4">{formatCurrency(sc.nominalAfterTax)}</td>
                   <td className="py-3.5 px-4 font-medium text-foreground">{formatCurrency(sc.npvAfterTax)}</td>
                   <td className="py-3 px-4 font-medium text-foreground">{formatCurrency(sc.terminalWealth)}</td>

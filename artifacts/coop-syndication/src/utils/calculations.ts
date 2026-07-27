@@ -114,6 +114,13 @@ export interface DealInputs {
   shareAssistancePct: number;        // % of those shares needing outside help
   // Seller Profile
   totalFMV: number;
+  // What a real cash buyer would actually pay for the WHOLE property, fee
+  // simple — which need not equal appraised FMV. Cash offers routinely sit
+  // below appraisal for speed, certainty and as-is condition. 0 = use FMV.
+  // Drives ONLY the straight-cash comparison scenario; it never touches the
+  // § 170 donation (which rests on the land parcel's own appraisal) or the
+  // co-op's contract price. See TOOLTIPS.cashOffer for the appraisal caution.
+  cashOfferPrice: number;
   originalCostBasis: number;
   accumulatedDepreciation: number; // clamped to building share of basis
   cltLandDonation: number;         // appraised FMV of the donated land parcel
@@ -213,6 +220,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   memberShareParticipationPct: 80, // day-one buy-in; the rest join later
   shareAssistancePct: 40,          // share needing YS Community Foundation help
   totalFMV: 1250000,
+  cashOfferPrice: 0,           // 0 = a cash buyer pays appraised FMV; set it lower to test a real offer
   originalCostBasis: 475000,
   accumulatedDepreciation: 356250,
   cltLandDonation: 430000,
@@ -325,6 +333,7 @@ export interface SellerScenario {
   npvAfterTax: number;           // discounted at the seller's after-tax reinvestment rate
   terminalWealth: number;        // npvAfterTax grown to the comparison horizon at that rate
   totalTax: number;
+  cashAtClosing: number;         // after-tax cash IN HAND on closing day
 }
 
 export interface SellerMetrics {
@@ -597,6 +606,10 @@ export const TOOLTIPS = {
     'ON: investors are paid their return each year from rents. OFF: the return accrues and is paid at the buyout instead — Phase-1 rents drop by the pref amount, and the buyout loan grows by the accrued total. Same investor economics, shifted in time; this is the tenant-affordability relief valve.',
   escalators:
     'Operating costs inflate: water/sewer 8%/yr (village ordinance through 2027, PFAS pressure after), insurance 8%/yr, property taxes and management 3%/yr, other lines 2.5%/yr. Phase-2 rent is computed on buyout-year costs — flat-cost models understate it badly.',
+  cashOffer:
+    'What a real cash buyer would actually pay for the WHOLE property, fee simple — which need not equal appraised FMV. Set $0 to assume a buyer pays appraisal. Cash offers routinely land 5–15% below appraised value: the buyer is pricing speed, certainty, as-is condition, and their own required return, and an appraisal assumes reasonable exposure time that a quick sale does not get. Lowering this makes the note look better by comparison — correctly, because the honest question is "note versus the cash Paul could ACTUALLY get," not "note versus a theoretical appraisal." It drives ONLY the straight-cash comparison row; it never touches the § 170 donation or the co-op\'s contract price. TWO CAUTIONS FOR THE CPA AND APPRAISER. (1) A contemporaneous arm\'s-length cash offer is evidence of fair market value. Claiming a high FMV to support a large charitable deduction while accepting a materially lower price is a pattern the IRS scrutinizes hard in donation cases; the land appraisal must stand on its own facts. (2) There IS a legitimate reason the parts need not sum to the whole: the co-op buys IMPROVEMENTS ON LEASED LAND, and a leasehold interest is generally worth less than a fee-simple residual. The donated parcel and the sold improvements each get their own appraisal — do not derive one by subtracting from the other.',
+  cashAtClosing:
+    'What the seller actually banks on closing day, after tax and after sale costs — the number a seller usually cares about most and the one NPV tends to bury. A straight cash sale hands over the whole price at once but also triggers the entire tax bill at once. The installment note pays only the down payment at closing, less Year-1 tax and legal/title, so this column is deliberately much smaller — the rest arrives over the note term with interest, and the deferred tax stays working inside the note. Read this column together with Nominal, NPV and Wealth-in-Year-N: cash at closing answers "what do I have next month," and the other three answer "what am I worth in the end."',
   memberShares:
     'A one-time share each member buys to join the co-op. It replaces investor capital dollar-for-dollar and earns NO preferred return, so every share dollar lowers rent in BOTH phases and shrinks the Year-5 refinance. Refundable at par when a member leaves (limited equity — no appreciation), which is precisely what keeps the co-op affordable across generations: Greenmont Mutual Housing in Kettering has stayed affordable since 1947 because members cannot sell their units at a profit. THE SHARE PRICE IS THE GENTRIFICATION RISK IN THIS DEAL. $2,000 is set deliberately below Greenmont\'s $3,500 because a price sitting tenants cannot reach would convert an anti-displacement project into a displacement one. Four rules the deal documents must carry: (1) buying a share is NEVER a condition of staying — non-purchasing households remain residents at the SAME rent and may join later; (2) offer installments (24–36 months), sweat-equity credit, and a share-assistance fund; (3) no income minimum, no credit score, no screening of sitting tenants — a conversion inherits its residents, unlike Greenmont, which admits on FICO and income floors; (4) give admission preference to people who live or work in the village, so turnover does not quietly move the community upmarket.',
   shareAssistance:
@@ -1177,18 +1190,21 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
   // Paul invests the cash-sale proceeds at that rate instead?").
   const H = inputs.comparisonHorizon;
   const growth = Math.pow(1 + ctx.disc, H);
-  const mktCost = (inputs.marketSaleCostPct / 100) * inputs.totalFMV; // broker on a market sale
+  // A cash buyer pays what they offer, not what the appraisal says. 0 = FMV.
+  const cashPrice = inputs.cashOfferPrice > 0 ? inputs.cashOfferPrice : inputs.totalFMV;
+  const mktCost = (inputs.marketSaleCostPct / 100) * cashPrice; // broker on the actual price
   const directCost = (inputs.directDealCostPct / 100) * ctx.contractPrice; // legal/title, direct
 
   // Scenario 1: straight OPEN-MARKET cash sale at FMV — pays a broker; the whole
   // gain and the whole tax land at closing, so only the after-tax, after-cost
   // lump is available to reinvest.
-  const cashGain = Math.max(0, inputs.totalFMV - ctx.totalAdjustedBasis);
+  const cashGain = Math.max(0, cashPrice - ctx.totalAdjustedBasis);
   const cashTax = lumpGainTax(cashGain, Math.min(ctx.clampedDepreciation, cashGain), 0);
-  const cashNet = inputs.totalFMV - cashTax - mktCost;
+  const cashNet = cashPrice - cashTax - mktCost;
   const straightCash: SellerScenario = {
     label: 'Straight cash sale',
     saleCosts: mktCost,
+    cashAtClosing: cashNet,
     nominalAfterTax: cashNet,
     npvAfterTax: cashNet,
     terminalWealth: cashNet * growth,
@@ -1217,6 +1233,7 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
   const cashPlusDonation: SellerScenario = {
     label: 'Cash sale + CLT donation',
     saleCosts: directCost,
+    cashAtClosing: ctx.contractPrice - bifTaxY1 - directCost,
     nominalAfterTax: bifNominal,
     npvAfterTax: bifNpv,
     terminalWealth: bifNpv * growth,
@@ -1237,6 +1254,7 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
   const installmentPlusDonation: SellerScenario = {
     label: 'Installment + CLT donation',
     saleCosts: directCost,
+    cashAtClosing: (ctx.installmentFlows[0] ?? 0) - directCost,
     nominalAfterTax: instNominal,
     npvAfterTax: instNpv,
     terminalWealth: instNpv * growth,
