@@ -507,3 +507,75 @@ The headline for investors: **bonus depreciation is a loan against their own fut
 PIK saves roughly **$92,050** of rent across five years and adds **$105,871** to the takeout — a **net cost of $13,821**, which is precisely the compounding. It also pushes LTV and coverage the wrong way at the moment the deal is most fragile, and the refinance — not Phase-1 rent — is this deal's binding constraint.
 
 PIK is still the strongest single lever on Phase-1 rent, and it is legitimate when tenants need immediate relief **and** there is a concrete plan (grants, member shares, faster principal, a § 538 takeout) to shrink the Year-5 burden. It is not free, and it should never be used to make a launch pro forma look good. Investors are taxed on the accrued preferred as **ordinary income** when it is finally paid.
+
+## A.21 V5.11 — triage of the July 2026 external review ("operational fiction")
+
+An outside reviewer argued the model "optimizes for tax geometry while ignoring concrete operational physics." Four specific claims. **Two are correct and are now implemented; one is factually wrong about this model but right in direction; one is partly right.** Verdicts below, each checked against the engine rather than accepted or dismissed on tone.
+
+### A.21.1 "The utility baseline is a fantasy — the model allocates $600/unit/yr" — PREMISE WRONG, DIRECTION ACCEPTED
+
+The model's default was **$1,150/unit/yr ($96/month)**, not $600. The reviewer's stated baseline is off by nearly 2×, and the headline consequence ("understates OpEx by $20,000–$30,000 annually… erases $428,000 of exit valuation") is correspondingly inflated: the true gap to their own recommended $1,500 floor is $350/unit/yr, or $8,750/yr across 25 units.
+
+**But the direction is right and the reviewer wins the argument on the merits.** Yellow Springs has had the region's most expensive water since 2017; reporting puts the average household combined water+sewer bill near **$237/month**, with lower-usage households around $94/month for water alone, and ordinance increases landed in January 2026 with another due in 2027. Apartments consume well below a single-family home, but $96/month all-in for water, sewer, trash and common-area electric was thin for this village.
+
+**Default raised $1,150 → $1,500/unit/yr.** Effect: Phase-1 cost floor $771 → **$802**, Phase-2 $833 → **$873**. Flagged in the tooltip as a **diligence item, not an estimate** — the real answer is the Village's apartment-class rate schedule plus Paul's last twelve months of actual bills.
+
+### A.21.2 "The valuation paradox" — CORRECT, AND THE STRONGEST POINT. IMPLEMENTED
+
+The criticism: A.15 pitches a *restricted-rent* valuation to suppress assessed value for property-tax purposes, while A.16 tested the refinance against a $1.45M "stabilized" market value. You cannot claim a low value at the auditor and a high one at the bank — a takeout appraiser valuing a property encumbered by a ground lease and at-cost rents will use the restricted income approach.
+
+This is right. The old $1.45M default implied a **4.71% cap rate** on the restricted NOI, which is not a Class-C 1968 garden apartment in a village of 3,700. (The model's own `stabilizedValue` tooltip already warned about exactly this; the *default* contradicted the warning — a fair hit.)
+
+**Implemented:** new `exitCapRate` input (default 7.0%); `stabilizedValue` becomes an **override with 0 = derive**, and the default is now **derived** as Phase-2 NOI ÷ cap rate. The feasibility panel carries a valuation cross-check that reports the income-approach value, and when an override is supplied it reports the **implied cap rate** and flags divergence above 1.15×. The old $1.45M now displays as **1.49× the income-approach value at a 4.71% implied cap** — visible rather than buried.
+
+At the new defaults the derived value is **$974,858**, LTV **88%** — failing. Cap-rate sensitivity:
+
+| Cap rate | Derived value | LTV | Gap | Binding |
+|---|---|---|---|---|
+| 6.5% | $1,049,848 | 81% | $142,458 | DSCR |
+| 7.0% | $974,858 | 88% | $142,458 | DSCR |
+| 7.5% | $909,868 | 94% | $172,349 | **LTV** |
+| 8.0% | $853,001 | 100% | $214,999 | **LTV** |
+
+The reviewer's "$300k+ hole" overshoots at realistic cap rates (the gap stays DSCR-bound at $142,458 through 7%), but the direction and the seriousness are correct.
+
+**A perverse dynamic this exposes, which neither we nor the reviewer had named:** under cost-recovery rent, *making the deal cheaper lowers the appraised value*. A § 538 takeout drops debt service, which drops the cost floor, which drops collected rent, which drops NOI — and the derived value falls from $974,858 to $806,220. Cheaper debt buys less loan capacity. The escape is the **rent policy**: holding rent at the policy level instead of falling to the cost floor keeps NOI up. The $700 policy therefore does *triple* duty — affordability promise, DSCR cushion, and appraisal support.
+
+The combination that actually clears: **§ 538 at 6%/40yr plus ~$315k of grants → LTV 77%, DSCR 1.37, gap $15,368.**
+
+### A.21.3 "Debt-vs-equity recharacterization" — CORRECT AND SERIOUS. DILIGENCE ITEM, NOT A MATH FIX
+
+Fixed 7% preferred + no upside participation + return of capital at a formula price is a profile the IRS can recharacterize as **debt**. If it is, the investors lose § 168(k) entirely, the tax alpha vanishes, and the capital does not close. This is the single largest *structural* risk in the deal and it is not something the engine can compute.
+
+Mitigating factors already in the design, and the ones that need counsel:
+- The exit is an **option held by the co-op, not a mandatory redemption** — no fixed maturity is among the strongest equity factors (already a locked design decision, A.6).
+- Investors bear **real loss risk**: nothing guarantees the Year-5 refinance, and this model exists precisely because that refinance is uncertain.
+- **PIK accrual is more debt-like** than current-pay; that is a further argument against defaulting to it.
+- Consider granting **some upside participation**, however small, purely as an equity indicium.
+- § 704(b) **substantial economic effect** must independently support allocating the depreciation to investors.
+
+Added to the diligence list at the top of the risk stack, alongside the Phase-2 takeout.
+
+### A.21.4 "The CapEx illusion — $7,200/door" — PARTLY RIGHT
+
+$180,000 ($7,200/door) is light for a 1968 building, and the reviewer is right that a Year-5 commercial Property Condition Assessment will look for end-of-life mechanicals. Two corrections to the framing: this is a **preservation conversion, not a repositioning**, and **Davis-Bacon triggers only if HOME funds are used** — optional here and defaulted to $0.
+
+Sensitivity, since the sliders already allow it:
+
+| CapEx | Investor capital | IRR | P1 floor | Gap |
+|---|---|---|---|---|
+| $7,200/door | $263,000 | 8.5% | $771 | $142,458 |
+| $15,000/door | $458,000 | 7.5% | $819 | $174,958 |
+| $20,000/door | $583,000 | 7.1% | $849 | $195,792 |
+
+Default unchanged — it is a user judgment the sliders expose — but the reviewer's separate point about **reserves** lands: $400/unit/yr is thin for this building, and $500–600 is the defensible range.
+
+### A.21.5 "Rents suppressed via a policy floor of $700" — MISREADS THE MODEL
+
+The policy is a floor on **rent**, not a cap: the co-op charges the greater of the policy and its cost floor, and a policy below the floor is reported as unhonourable rather than applied. At defaults the cost floor is **$802 > $700**, so `policyBelowCostFloor` already fires and tenants pay $802. The reviewer's recommendation — "this will instantly show that a $700 rent policy cannot be maintained" — describes behaviour the model already had (A.16).
+
+Similarly "artificially elevate the IRR to ~7.3%": bonus depreciation is statutory, not artificial, and the figure was already 8.5% after member shares (A.18).
+
+### A.21.6 Verdict
+
+The review's closing line — *"stop polishing the depreciation schedule until the building can actually afford its own water bill"* — is unfair to the model's actual state but correct about priority. Its two real contributions are the **valuation paradox**, which was a genuine internal contradiction between A.15 and A.16 and is now resolved in favour of the restricted income approach, and the **debt-vs-equity recharacterization risk**, which is now on the diligence list. Both improve the model. The utilities claim was wrong about our number and right about our judgment.
