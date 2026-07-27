@@ -165,6 +165,16 @@ export interface DealInputs {
   grantOhioTrust: number;          // Ohio Housing Trust Fund — moderate
   grantFhlbAhp: number;            // FHLB Cincinnati AHP — competitive
   // Investor Profile & New CapEx
+  // MASTER SWITCH for the tax-investor layer. OFF collapses the syndicate
+  // entirely: no investor capital, no preferred return, no bonus depreciation,
+  // no Year-5 capital return. Whatever the deal still needs at closing becomes
+  // a CLOSING CAPITAL GAP to be met by member shares, grants, a subordinate
+  // CDFI/Home Inc. loan, a smaller down payment, or a phased renovation.
+  // Turn it off when no investor can actually USE the depreciation — a REPS
+  // investor already sheltered by other paper losses has no marginal appetite,
+  // and a passive investor cannot deduct currently at all (§ 469 suspends
+  // until exit). See ANALYSIS.md A.23.
+  investorsEnabled: boolean;
   investorPrefReturn: number;      // %
   prefCurrentPay: boolean;         // true = paid from rents; false = accrues (PIK)
   investorMarginalRate: number;    // %
@@ -253,6 +263,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   grantCountyHome: 0,
   grantOhioTrust: 0,
   grantFhlbAhp: 0,
+  investorsEnabled: true,      // OFF models the grants-and-member-equity path
   investorPrefReturn: 7,
   prefCurrentPay: true,
   investorMarginalRate: 35,
@@ -497,6 +508,9 @@ export interface MemberEquityPlan {
  * target, sized rather than guessed.
  */
 export interface FeasibilityMetrics {
+  investorsEnabled: boolean;
+  capitalNeedAtClosing: number;    // down payment + new CapEx
+  closingCapitalGap: number;       // unfunded once shares and grants are applied
   stabilizedValue: number;         // the value actually used in the LTV test
   incomeApproachValue: number;     // Phase-2 NOI ÷ exitCapRate
   valueIsDerived: boolean;         // true when no override was supplied
@@ -631,6 +645,8 @@ export const TOOLTIPS = {
     'What a real cash buyer would actually pay for the WHOLE property, fee simple — which need not equal appraised FMV. Set $0 to assume a buyer pays appraisal. Cash offers routinely land 5–15% below appraised value: the buyer is pricing speed, certainty, as-is condition, and their own required return, and an appraisal assumes reasonable exposure time that a quick sale does not get. Lowering this makes the note look better by comparison — correctly, because the honest question is "note versus the cash Paul could ACTUALLY get," not "note versus a theoretical appraisal." It drives ONLY the straight-cash comparison row; it never touches the § 170 donation or the co-op\'s contract price. TWO CAUTIONS FOR THE CPA AND APPRAISER. (1) A contemporaneous arm\'s-length cash offer is evidence of fair market value. Claiming a high FMV to support a large charitable deduction while accepting a materially lower price is a pattern the IRS scrutinizes hard in donation cases; the land appraisal must stand on its own facts. (2) There IS a legitimate reason the parts need not sum to the whole: the co-op buys IMPROVEMENTS ON LEASED LAND, and a leasehold interest is generally worth less than a fee-simple residual. The donated parcel and the sold improvements each get their own appraisal — do not derive one by subtracting from the other.',
   cashAtClosing:
     'What the seller actually banks on closing day, after tax and after sale costs — the number a seller usually cares about most and the one NPV tends to bury. A straight cash sale hands over the whole price at once but also triggers the entire tax bill at once. The installment note pays only the down payment at closing, less Year-1 tax and legal/title, so this column is deliberately much smaller — the rest arrives over the note term with interest, and the deferred tax stays working inside the note. Read this column together with Nominal, NPV and Wealth-in-Year-N: cash at closing answers "what do I have next month," and the other three answer "what am I worth in the end."',
+  investorsEnabled:
+    'MASTER SWITCH for the tax-investor layer. ON: a syndicate funds the down payment and renovation, takes the bonus depreciation, earns a preferred return, and is bought out at the Year-5 refinance. OFF: no syndicate at all — no investor capital, no preferred return charged to rent, no capital to return at the buyout, so the Year-5 refinance carries only the seller balloon. Whatever the deal still needs at closing is reported as a CLOSING CAPITAL GAP rather than silently assumed. WHEN TO TURN IT OFF: the syndicate only makes sense if a real person can USE the depreciation. A real-estate professional already running paper losses from other property has no marginal appetite for more deductions, and a passive investor cannot deduct currently at all — § 469 suspends the losses until the exit, which is exactly why the passive IRR is materially below the REPS one. If nobody in the actual buyer pool can use it, the tax alpha is theoretical and the honest structure is member shares plus grants plus a low-cost subordinate loan. Pair this with a small down payment and a phased renovation: the capital need collapses fast.',
   memberShares:
     'A one-time share each member buys to join the co-op. It replaces investor capital dollar-for-dollar and earns NO preferred return, so every share dollar lowers rent in BOTH phases and shrinks the Year-5 refinance. Refundable at par when a member leaves (limited equity — no appreciation), which is precisely what keeps the co-op affordable across generations: Greenmont Mutual Housing in Kettering has stayed affordable since 1947 because members cannot sell their units at a profit. THE SHARE PRICE IS THE GENTRIFICATION RISK IN THIS DEAL. $2,000 is set deliberately below Greenmont\'s $3,500 because a price sitting tenants cannot reach would convert an anti-displacement project into a displacement one. Four rules the deal documents must carry: (1) buying a share is NEVER a condition of staying — non-purchasing households remain residents at the SAME rent and may join later; (2) offer installments (24–36 months), sweat-equity credit, and a share-assistance fund; (3) no income minimum, no credit score, no screening of sitting tenants — a conversion inherits its residents, unlike Greenmont, which admits on FICO and income floors; (4) give admission preference to people who live or work in the village, so turnover does not quietly move the community upmarket.',
   shareAssistance:
@@ -784,7 +800,11 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const grantsAtClosingApplied = inputs.grantsAtClosing
     ? Math.min(grantsRequested, capitalAfterShares)
     : 0;
-  const capitalRequired = capitalAfterShares - grantsAtClosingApplied;
+  const unfundedAtClosing = Math.max(0, capitalAfterShares - grantsAtClosingApplied);
+  // With the syndicate switched off nobody writes this cheque; it becomes an
+  // explicit gap rather than silently assumed capital.
+  const capitalRequired = inputs.investorsEnabled ? unfundedAtClosing : 0;
+  const closingCapitalGap = inputs.investorsEnabled ? 0 : unfundedAtClosing;
   const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
   const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
   // Investors are taken out at the BUYOUT, which is not necessarily when the
@@ -1121,6 +1141,9 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
       : 0;
   const supportableLoan = Math.max(0, Math.min(maxLoanByLtv, maxLoanByDscr));
   const feasibility: FeasibilityMetrics = {
+    investorsEnabled: inputs.investorsEnabled,
+    capitalNeedAtClosing: capitalNeed,
+    closingCapitalGap,
     stabilizedValue: valueForLtv,
     incomeApproachValue,
     valueIsDerived,

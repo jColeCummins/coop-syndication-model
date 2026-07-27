@@ -639,3 +639,68 @@ Each of these is correct and each is a *counsel or diligence* item, not a slider
 Two of the review's contributions changed the model: **defaults discipline** (the printed base case was quietly optimistic in four places) and the **OBBBA charitable cap**. Everything else it raises is correct and belongs to counsel, a lender, an appraiser, or a named investor — not to the engine.
 
 Its bottom line is adopted verbatim as project policy: *freeze feature work; run a six-week close-or-restructure sprint on takeout lender reality, tax/structure opinion, actuals + PCA + insurance, appraisal scopes, and named capital.* The engine is sufficient for that job.
+
+## A.23 V5.13 — the investor syndicate becomes a toggle (and may be net-negative)
+
+Raised by the project owner: the REPS-qualified people actually reachable are *already* running paper losses from other property, so more deductions have no marginal value to them; and a passive investor cannot use the depreciation currently at all. If nobody in the real buyer pool can use the tax shield, the syndicate is paying a preferred return and consuming a Year-5 capital return in exchange for a benefit that no one banks.
+
+That is correct, and the model should be able to test the deal without investors. New `investorsEnabled` master switch (default **true**, so nothing silently changes).
+
+### A.23.1 Can a passive investor be made to benefit? Honestly, no
+
+- **§ 469** suspends passive losses until disposition. They release in full at the Year-5 exit — which is why the passive IRR (6.1%) sits below the REPS IRR (9.0%). The deduction is not lost, it is deferred five years, and the time value of that gap *is* the tax alpha.
+- **Passive income from other activities** is the one real answer: an investor with other rentals or LP income can absorb these losses currently. That is a search criterion for investors, not a structural fix.
+- **§ 469(i)'s $25,000 allowance** phases out between $100k and $150k MAGI — irrelevant to anyone writing a meaningful cheque.
+- **No clean workaround exists.** Short-term-rental treatment does not apply to apartments; grouping elections cannot manufacture REPS; and recharacterising the interest as debt to create portfolio income is precisely the failure mode A.21.3 warns about.
+
+So the owner's read stands: unless a specific investor either qualifies as a real-estate professional *with unused capacity* or has other passive income to shelter, the syndicate's tax premise is theoretical.
+
+### A.23.2 What the switch does
+
+**OFF:** no investor capital, no preferred return charged to rent, no bonus depreciation, no capital returned at the buyout — so the Year-5 refinance carries **the seller balloon alone**. Whatever the deal still needs at closing is reported as a **closing capital gap** rather than silently assumed. The investor card is hidden entirely.
+
+Verified: seller economics are byte-for-byte identical either way; the gap when OFF equals exactly the capital investors would have contributed.
+
+### A.23.3 The finding — the syndicate looks net-negative here
+
+Same inputs, switch flipped:
+
+| | Investors ON | Investors OFF |
+|---|---|---|
+| Investor capital | $263,000 | $0 |
+| Closing capital gap | $0 | $263,000 |
+| Preferred return in rent | $18,410/yr | $0 |
+| Phase-1 cost floor | $832 | **$767** |
+| Phase-2 refinance | $854,750 | **$591,750** |
+| Phase-2 financing gap | $142,458 | **$98,625** |
+
+The syndicate buys $263,000 of closing capital and costs $18,410/yr of rent plus a $263,000 capital return at the buyout — which is most of why the Year-5 refinance is unfinanceable. Remove it and both the rent floor and the takeout improve immediately. The trade is that the $263,000 must come from somewhere else.
+
+### A.23.4 It can come from somewhere else — the capital need collapses
+
+| Configuration | Capital need | Member shares | Closing gap |
+|---|---|---|---|
+| As-is (15% down, $180k CapEx) | $303,000 | $40,000 | $263,000 |
+| 5% down, phase the renovation | $41,000 | $40,000 | $1,000 |
+| + shares at 100% participation | $41,000 | $41,000 | **$0** |
+
+**A $2,000 member share at full participation funds a 5% down payment outright.** Paul's headroom stays positive ($24,454 against a $16,546 Year-1 tax), so the down payment still covers his tax.
+
+Stacked with the § 538 takeout and the operating levers:
+
+> **No investors · closing gap $0 · Phase-1 $709 · Phase-2 $653 · refinance $361,368 · DSCR 1.55 · financing gap $0**
+
+That is the first configuration in this project's history that clears **both** phases with no financing gap and no reliance on a tax investor.
+
+### A.23.5 What it costs — stated plainly
+
+1. **No renovation at closing.** $0 CapEx means the 1968 building's deferred maintenance is funded later from surplus, reserves or grants. For a property that needs a PCA, this is the real trade, and it argues for pursuing rehab grants *before* closing rather than after.
+2. **Paul receives far less at closing** — a 5% down payment is $41,000 against $123,000 at 15%. His NPV is largely preserved (more principal arrives later with interest), but his day-one cash drops sharply and his headroom over the Year-1 tax narrows to $24,454.
+3. **100% member participation is optimistic.** A.18 defaults to 80% precisely because partial buy-in is the expected case. At 80% the gap is roughly $8,000 — small, and exactly what an $8,000 revolving share-assistance fund from the Community Foundation covers.
+4. **The federal subsidy is forgone.** Nobody claims the bonus depreciation. Given the owner's stated buyer pool, that subsidy was not being captured anyway — but it does mean this path leans harder on grants and the § 538 guarantee.
+
+### A.23.6 Consequence for the sprint
+
+This reorders `docs/CLOSE-OR-RESTRUCTURE.md`. If the no-investor path is the plan, **Tier 1.2's tax-counsel memo shrinks dramatically** — no syndicate means no § 385 debt-vs-equity exposure, no § 704(b) allocation question, and no Reg D offering on the investor side (member share offerings still need securities review). The largest unmodelled failure mode identified in A.22 substantially disappears.
+
+What becomes *more* critical: the § 538 term sheet, Home Inc. as a subordinate-loan or guarantee partner, and grant timing — because with no investor capital there is no buffer if a grant slips.
