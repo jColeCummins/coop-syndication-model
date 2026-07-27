@@ -9,7 +9,7 @@ import { AlertTriangle, Check } from 'lucide-react';
  * Presentational only; every number comes from the engine's FeasibilityMetrics.
  */
 export function FeasibilitySection({ model, tooltips }: { model: DealMetrics; tooltips: typeof TOOLTIPS }) {
-  const { feasibility: f, surplus: s, inputs } = model;
+  const { feasibility: f, surplus: s, memberEquity: me, inputs } = model;
   const fundable = f.financingGap <= 0.5;
   const p2Year = inputs.balloonYear + 1;
 
@@ -72,6 +72,54 @@ export function FeasibilitySection({ model, tooltips }: { model: DealMetrics; to
           operating income equals debt service and coverage pins at 1.00&times; by construction. That is the honest
           result, not a rounding artifact &mdash; no lender refinances a break-even property. Turn on
           &ldquo;Hold rent at a policy level&rdquo; to model the cushion.
+        </div>
+      )}
+
+      {/* Member share capital */}
+      {me.totalRaised > 0 && (
+        <div className="bg-card border border-border rounded-md overflow-hidden">
+          <div className="px-4 py-3 bg-muted/50 border-b border-border flex items-center justify-between">
+            <span className="text-[14px] font-medium text-muted-foreground">
+              Member Share Capital <InfoTooltip text={tooltips.memberShares} />
+            </span>
+            <span className="text-[12px] text-emerald-500">
+              {formatCurrency(me.totalRaised)} raised &middot; {Math.round(me.unitsPurchasing)} of {inputs.units} homes
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border">
+            <Stat
+              label="What a household pays"
+              value={formatCurrency(me.sharePrice)}
+              sub={`${me.monthsOfRent.toFixed(1)} months of rent · ${formatCurrency(me.installment24)}/mo over 24, ${formatCurrency(me.installment36)}/mo over 36`}
+            />
+            <Stat
+              label="Assistance needed"
+              value={formatCurrency(me.assistanceNeeded)}
+              sub={`${formatPercent(inputs.shareAssistancePct)} of shares · the community-foundation ask, sized`}
+              tip={tooltips.shareAssistance}
+              accent
+            />
+            <Stat
+              label="What it buys the co-op"
+              value={`${formatCurrency(me.totalRaised)} off the refinance`}
+              sub={me.rentReliefPerUnitMonth > 0
+                ? `plus ${formatCurrency(me.rentReliefPerUnitMonth)}/unit/mo of rent relief (preferred return avoided)`
+                : `${formatCurrency(me.prefAvoided)}/yr of preferred return avoided (accrues to buyout)`}
+            />
+          </div>
+          <div className="px-4 py-3 border-t border-border text-[12px] text-muted-foreground">
+            <span className="text-foreground font-medium">Anti-displacement terms</span> &mdash; deal documents, not model
+            inputs: buying a share is never a condition of staying, and non-purchasing households remain residents at the
+            same rent; installments, sweat-equity credit and assistance are offered; no income minimum, credit score or
+            screening applies to sitting tenants; admission preference goes to people who live or work in the village.
+            Shares refund at par &mdash; no appreciation &mdash; which is how Greenmont has stayed affordable since 1947.
+          </div>
+          {me.clampedByCapitalNeed && (
+            <div className="px-4 py-3 border-t border-border text-[12px] text-amber-500">
+              Shares at this price exceed the deal&rsquo;s entire capital need; the excess is not used. Lower the price
+              &mdash; the co-op cannot productively absorb more member money than it needs.
+            </div>
+          )}
         </div>
       )}
 
@@ -161,6 +209,20 @@ function TestCard({ label, pass, actual, limit, detail, supports, binding }: {
       <div className="text-[12px] text-muted-foreground pt-1 border-t border-border">
         Supports <span className="text-foreground tabular-nums">{formatCurrency(supports)}</span>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, tip, accent }: {
+  label: string; value: string; sub: string; tip?: string; accent?: boolean;
+}) {
+  return (
+    <div className="p-4 flex flex-col space-y-1">
+      <span className="text-[12px] uppercase tracking-widest text-muted-foreground font-semibold">
+        {label}{tip && <InfoTooltip text={tip} />}
+      </span>
+      <span className={`text-xl font-light tabular-nums ${accent ? 'text-amber-500' : 'text-foreground'}`}>{value}</span>
+      <span className="text-[12px] text-muted-foreground">{sub}</span>
     </div>
   );
 }
