@@ -579,3 +579,63 @@ Similarly "artificially elevate the IRR to ~7.3%": bonus depreciation is statuto
 ### A.21.6 Verdict
 
 The review's closing line — *"stop polishing the depreciation schedule until the building can actually afford its own water bill"* — is unfair to the model's actual state but correct about priority. Its two real contributions are the **valuation paradox**, which was a genuine internal contradiction between A.15 and A.16 and is now resolved in favour of the restricted income approach, and the **debt-vs-equity recharacterization risk**, which is now on the diligence list. Both improve the model. The utilities claim was wrong about our number and right about our judgment.
+
+## A.22 V5.12 — triage of the July 2026 peer review; feature freeze
+
+Archived at `docs/REVIEW-2026-07-perplexity.md`. This is the strongest review the project has received: specific, fair, credits what works, and its central instruction is correct — **the remaining risk is legal and takeout-related, not mathematical.** Feature work on the engine is now frozen; the deliverable is `docs/CLOSE-OR-RESTRUCTURE.md`.
+
+### A.22.1 Accepted and implemented — defaults discipline
+
+The review's sharpest *actionable* point: the model kept flattering toggles ON while its own prose called them CPA-confirm items, and twice agreed a default was thin without moving it. Fixed. The printed base case is now the conservative one, with tax alpha shown as upside:
+
+| Default | Was | Now | Why |
+|---|---|---|---|
+| `investorHasREPS` | **true** | **false** | REPS is a fact about a named investor (documented hours, material participation), not a setting. Marketing a REPS IRR without one is capital-raise fiction. |
+| `ohioBIDConfirmed` | **true** | **false** | "CPA-confirm" means do not assume it. |
+| `reservesPerUnit` | $400 | **$550** | A.17 already conceded $400 was thin for a 1968 building; lenders escrow reserves anyway. |
+| `vacancyRate` | 4% | **6%** | A.17 already conceded 4% was optimistic for a conversion that inherits residents and refuses screening. |
+| `prefCurrentPay` | true | true | PIK was already off — correctly. |
+
+Effect at defaults: Phase-1 cost floor $802 → **$832**; seller lifetime note tax $133,263 → **$149,108**; **Year-1 investor refund $92,050 → $0**, because a passive investor's losses suspend under § 469 until the exit. The investor card now tells the passive story by default and labels the REPS figure as conditional on a named qualifying investor.
+
+That $0 is the honest headline. The whole "get a large share back within twelve months" narrative was REPS-only and was being printed as though it were the base case.
+
+### A.22.2 Accepted and implemented — OBBBA charitable benefit cap
+
+The review asked whether the engine reflects OBBBA's 2026 tightening of the *value* of itemised charitable deductions for top-bracket payers (commonly described as a 35-cent cap). It did not. Added `TAX_POLICY.CHARITABLE_BENEFIT_CAP = 0.35`, applied wherever a charitable dollar offsets **ordinary** income (annual schedule and both lump-sum comparison scenarios). The capital-gain offsets at 25%/20%/15% are unaffected, being already below the cap.
+
+Non-binding at the default 24% seller bracket; it bites only above 35%. Verified: lifetime note tax at a 37% bracket rises from the uncapped path, while 24/32/35% are unchanged.
+
+### A.22.3 Checked and found NOT to bind — § 461(l)
+
+The review flags excess-business-loss limitation as "simplified away." Checked: **§ 465 at-risk already caps the Year-1 deduction at cash contributed — $263,000 at defaults — which sits below the ~$313k single / ~$626k MFJ § 461(l) thresholds.** The at-risk rule pre-empts § 461(l) at this deal's sizing. It would bind if investor capital rose materially or if a member aggregated other business losses; recorded as a named limitation rather than modelled, consistent with the freeze.
+
+### A.22.4 Accepted, NOT coded — deliberately
+
+Each of these is correct and each is a *counsel or diligence* item, not a slider. Coding them would be exactly the "depreciation theatre" the review warns against. All are now Tier 1/2 line items in `docs/CLOSE-OR-RESTRUCTURE.md`:
+
+- **Entity stack as a first-class workstream** — who holds title Years 0–5; how the syndicate becomes a tenant LEC without a taxable transfer or broken installment characterisation; securities (Reg D + Ohio blue sky) on *both* the investor raise and member shares; § 216/Subchapter T during the hold. Correctly identified as the largest unmodelled failure mode.
+- **Debt-vs-equity under-mitigated** — the review is right that naming the risk (A.21.3) is not mitigating it. Added as design work: thin promote or residual share above a hurdle, governance rights, written opinion as a *closing condition*, and striking any date-certain return-of-capital language.
+- **Physical reality** — PCA, lead/asbestos/accessibility, insurance *bindability* (not trend), working capital and renovation-period vacancy.
+- **Conversion politics** — collections through conversion, the legal path for non-buying households, board capacity and D&O, and the dual-class occupancy risk created by "buying a share is never required to stay" if it is not carefully drafted.
+- **Capital-market reality** — mission-aligned *and* REPS-qualified *and* content with a single-digit tax-aware IRR carrying refinance and recharacterisation risk is a thin buyer pool. "Without a named capital plan, IRR decimals are decorative" is fair, and the passive-by-default change is the model's half of the answer.
+
+### A.22.5 Noted with qualification
+
+- **QBI defaulting on** — largely moot now: § 199A applies on REPS profit years, and REPS defaults off. Left un-toggled rather than adding a control during a freeze.
+- **Cost-seg 25% short-life share** — already flagged as the aggressive end of the 20–30% band and study-dependent; unchanged.
+- **Grant/basis characterisation** — already carried as a CPA-confirm; the review correctly upgrades it from modelling choice to drafting conclusion. Now a Tier 1 item.
+- **"Ohio gives no charitable deduction" / municipal tax** — fair to demand periodic reconfirmation rather than treating a tooltip as eternal. Added to the counsel memo scope.
+- **§ 538 caps "don't bind at all"** — the *rent* math is easy (cap $1,750–2,250/mo vs $700–800), but occupancy rules, average-rent tests and rehab hard-cost minimums can still bind in underwriting. A.19.3's phrasing was too breezy; corrected here and in the checklist.
+- **Float64** — the boundary stays bright: fine for a dashboard, wrong the day anything exports filing-grade schedules.
+
+### A.22.6 Where the review slightly overshoots
+
+- **"Self-management to $718 overstates the end state"** — agreed on substance, and A.17 already said 25 units cannot self-manage like Greenmont's 500. The $718 figure came from A.7's V5.3.1-era ladder, which predates that finding; it is superseded, not defended.
+- **"Rehab minimum … $7,200/door may not match a real PCA"** — correct as a § 538 program concern, and already carried as sensitivity (A.21.4). The default stays a user judgment the sliders expose, now paired with a Tier 1 PCA requirement.
+
+### A.22.7 Verdict
+
+Two of the review's contributions changed the model: **defaults discipline** (the printed base case was quietly optimistic in four places) and the **OBBBA charitable cap**. Everything else it raises is correct and belongs to counsel, a lender, an appraiser, or a named investor — not to the engine.
+
+Its bottom line is adopted verbatim as project policy: *freeze feature work; run a six-week close-or-restructure sprint on takeout lender reality, tax/structure opinion, actuals + PCA + insurance, appraisal scopes, and named capital.* The engine is sufficient for that job.

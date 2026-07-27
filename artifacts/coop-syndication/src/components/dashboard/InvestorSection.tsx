@@ -46,12 +46,16 @@ export function InvestorSection({ model, tooltips }: { model: DealMetrics; toolt
         </div>
         <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-[14px] tabular-nums">
           <RoiStat label="Capital In" value={formatCurrency(investor.capitalRequired)} sub="at closing" />
-          <RoiStat label="Year-1 Tax Refund" value={formatCurrency(investor.year1TaxRefund)} sub="shelters other income" emerald />
-          <RoiStat label="Effective Capital at Risk" value={formatCurrency(investor.effectiveCapitalAtRisk)} sub="after the refund" />
+          <RoiStat label={inputs.investorHasREPS ? 'Year-1 Tax Refund' : 'Year-1 Tax Refund (n/a)'} value={inputs.investorHasREPS ? formatCurrency(investor.year1TaxRefund) : '—'} sub={inputs.investorHasREPS ? 'shelters other income' : 'passive: losses suspend to exit'} emerald={inputs.investorHasREPS} />
+          <RoiStat label="Effective Capital at Risk" value={formatCurrency(inputs.investorHasREPS ? investor.effectiveCapitalAtRisk : investor.capitalRequired)} sub={inputs.investorHasREPS ? 'after the refund' : 'no Year-1 refund'} />
           <RoiStat label="Back at Exit + Total" value={formatCurrency(investor.totalReturned)} sub={`net ${formatCurrency(investor.netProfit)} · ${formatPercent(investor.simpleRoi * 100)} total`} emerald={investor.netProfit >= 0} />
         </div>
         <div className="px-4 pb-3 text-[14px] text-muted-foreground leading-relaxed">
-          Reads like a tax-advantaged 5-year note: ~{formatPercent((investor.capitalRequired > 0 ? investor.year1TaxRefund / investor.capitalRequired : 0) * 100)} of capital returns in Year 1 as a tax refund, the middle years are intentionally quiet{!inputs.prefCurrentPay ? ' (the preferred return is accruing, not paid)' : ''}, and capital{investor.accruedPrefAtExit > 0 ? ' plus accrued preferred' : ''} comes back at the Year-{investor.exit.year} takeout. The {formatPercent((investor.irrWithReps ?? 0) * 100)} REPS IRR captures all of it — the quiet years are not idle, the work was front-loaded into Year 1.
+          {inputs.investorHasREPS ? (
+            <>Reads like a tax-advantaged 5-year note: ~{formatPercent((investor.capitalRequired > 0 ? investor.year1TaxRefund / investor.capitalRequired : 0) * 100)} of capital returns in Year 1 as a tax refund, the middle years are intentionally quiet{!inputs.prefCurrentPay ? ' (the preferred return is accruing, not paid)' : ''}, and capital{investor.accruedPrefAtExit > 0 ? ' plus accrued preferred' : ''} comes back at the Year-{investor.exit.year} takeout. The {formatPercent((investor.irrWithReps ?? 0) * 100)} REPS IRR captures all of it — the quiet years are not idle, the work was front-loaded into Year 1. <span className="text-amber-500">REPS is a fact about a named investor, not a setting: it requires documented hours and material participation. Underwrite the passive case ({formatPercent((investor.irrWithoutReps ?? 0) * 100)}) unless a specific investor qualifies.</span></>
+          ) : (
+            <>PASSIVE BASE CASE — the honest default. There is <span className="text-foreground">no Year-1 refund</span>: § 469 suspends the paper losses until the takeout, where they release against the exit gain. Capital{investor.accruedPrefAtExit > 0 ? ' plus accrued preferred' : ''} comes back at the Year-{investor.exit.year} takeout for a {formatPercent((investor.irrWithoutReps ?? 0) * 100)} after-tax IRR. Turn on real-estate professional status only for an investor who actually qualifies — it lifts the return to {formatPercent((investor.irrWithReps ?? 0) * 100)}, and marketing that number without a named qualifying investor is capital-raise fiction.</>
+          )}
         </div>
       </div>
 
