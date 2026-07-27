@@ -22,6 +22,7 @@ A dark-mode, data-dense financial modeling SPA for a bifurcated Real Estate Limi
   - `utils/finance.ts` — low-level PMT / remaining-balance / NPV / IRR helpers
   - `components/` — presentational only
 - `docs/ANALYSIS.md` — CPA-grade deal analysis + V5 correction log (why each V4/primer rule changed)
+- `docs/COMPARABLE-GREENMONT.md` — verified operating facts for Greenmont Mutual Housing Corporation (Kettering, 500 units, co-op since 1942): member equity $3,500, dues, no-resale rule, governance, admission criteria, and what each implies for our defaults. Summarized in ANALYSIS.md A.17
 - API server exists (`artifacts/api-server`) but is unused by this app
 - Build/serve require env vars: `PORT` and `BASE_PATH` (e.g. `PORT=5199 BASE_PATH=/ pnpm run build`)
 
