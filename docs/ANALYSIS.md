@@ -285,4 +285,51 @@ Follows the seller's question about getting the county auditor to *freeze* prope
 
 **UI.** Two sliders directly under "Property taxes (per year)" (`0–100%`, `0–15 yr`). On the tenant Revenue Build-Up, the Property Taxes row now carries a status badge: green "−X% abated" on each phase where the term is active, and an amber "abatement expired" on Phase 2 when the term ends before the buyout — which, combined with the existing rent-cliff alert, makes the expiry trade-off honest and visible. A short abatement lowers early rent but *widens the Phase-1→Phase-2 cliff*; a full-term abatement (covering the buyout year) lowers both phases and does not.
 
-**Verified numbers (defaults, 60% abatement):** full 12-yr term → Phase-1 tax $30,000 → $12,000, Phase-2 (Year-6) $34,778 → $13,911; monthly rent $781 → ~$718 (Phase 1) and $845 → ~$772 (Phase 2). A 3-yr term abates Phase 1 identically but reverts Phase 2 to the full $34,778, lighting the CLIFF badge (+17.6% vs Phase 1). Default (0%) leaves every number identical to V5.5 — the abatement is applied for, never assumed. **Do not underwrite closing on an abatement that has not been granted.**
+**Verified numbers (V5.6 defaults, 60% abatement):** full 12-yr term → Phase-1 tax $30,000 → $12,000, Phase-2 (Year-6) $34,778 → $13,911; monthly rent $781 → ~$718 (Phase 1) and $845 → ~$772 (Phase 2). A 3-yr term abates Phase 1 identically but reverts Phase 2 to the full $34,778, lighting the CLIFF badge (+17.6% vs Phase 1). Default (0%) leaves every number identical to V5.5 — the abatement is applied for, never assumed. **Do not underwrite closing on an abatement that has not been granted.**
+
+## A.16 V5.7 — rent policy, surplus deployment, and the Phase-2 feasibility test
+
+The largest correction since V5. Prompted by two findings: (a) an external check that co-op blanket mortgages are underwritten more conservatively than conventional multifamily (National Cooperative Bank publishes a 55% maximum combined LTV on co-op underlying loans), and (b) the seller's decision that **rent need not be cut below today's $700** — the difference should buy something.
+
+### The defect this fixes
+
+Every version through V5.6 solved for a **cost-recovery rent**: revenue set to exactly cover debt service, opex and pref. That makes net operating income *identically equal* to debt service, so the debt-service coverage ratio is **exactly 1.00 by construction**. No lender refinances a break-even property; 1.20–1.25× is the normal floor. The model therefore reported an affordable rent for a deal that **could not have obtained its own Year-5 takeout loan** — and never tested for it. Affordability was being optimised against the wrong binding constraint.
+
+### Rent policy — a floor on rent, not a cap
+
+`rentPolicyEnabled` (default **on**) with `policyMonthlyRent` (default **$700**, today's rent). The co-op charges **the greater of the policy and its cost floor** — a co-op cannot elect to collect less than its costs, so surplus is never negative. Where the policy sits *below* the floor the promise simply cannot be honoured: `policyBelowCostFloor` fires, `shortfallPerUnitMonth` reports how far short, and tenants pay the floor regardless. That is the case at stock V5.6 defaults, where the floor is **$781** — the $700 policy only becomes honourable once the operating levers bring costs down.
+
+Phase 2 obeys the same rule, so where the policy binds in both phases tenants experience a genuinely **flat rent across the buyout** and the rent cliff disappears from their experience (verified: $700 / $700, 0.0% drift, against cost floors of $675 and $694).
+
+### Surplus deployment
+
+Surplus accrues only in years 1..buyout, while the seller note is outstanding, and splits three ways (shadow equity takes the remainder, so shares always total 100%):
+
+- **Extra seller-note principal** (default 60%) — applied once at each year end, inside the amortisation loop. The balloon is now taken from the schedule's actual ending balance rather than the closed-form `remainingBalance()`, which extra principal makes wrong. Verified: $21,353 of extra principal removes **$24,155** from the balloon — the excess is compounded interest saved.
+- **Capital reserves** (default 25%) — accumulate as the co-op's own cash and are **deliberately NOT netted against the refinance**. A reserve that gets spent is not a reserve, and most lenders escrow replacement reserves as a condition anyway.
+- **Shadow equity** (remainder, 15%) — credits members for the capital their above-floor rent contributes. Documented as **non-redeemable or deeply capped**: a cash-redemption right is a balance-sheet liability a refinance lender discounts, and it can collide with the CLT ground-lease resale formula. CPA to confirm it does not disturb Subchapter T / § 216 treatment.
+
+### Phase-2 feasibility test
+
+New `FeasibilityMetrics` tests the refinance against **both** lender constraints and reports the supportable loan as the lesser: max LTV against `stabilizedValue` (default $1.45M, CONFIRM BY APPRAISAL), and min DSCR (default 1.20×) against buyout-year NOI. The excess is a **financing gap in dollars** — which sizes the grant requirement instead of leaving it to assumption. `bindingConstraint` names which test binds; at every configuration tested it is DSCR, not LTV, which is the opposite of the intuition that drove earlier grant sizing.
+
+Engine-verified ladder (stabilized value $1.45M, 75% LTV, 1.20×):
+
+| Configuration | Refi | LTV | DSCR | Gap |
+|---|---|---|---|---|
+| V5.6 defaults (cost recovery) | $894,750 | 62% | **1.00** | $149,125 |
+| + conservative ops, $700 policy | $870,596 | 60% | 1.03 | $126,227 |
+| + 16-yr note amortisation | $848,549 | 59% | 1.10 | $67,866 |
+| + $315k grants at buyout | $555,596 | 38% | 1.69 | **$0** |
+
+### Seller effect
+
+Extra principal is NPV-neutral to the seller and improves current income: through the balloon he receives **+$17,082 more in years 1–4**, with total cash essentially unchanged (−$2,802, being interest he no longer earns on a faster-declining balance). Donation absorption is untouched — the $430k gift stays fully absorbed at 98.3% utilisation, $0 expired, in every configuration.
+
+### Regression safety
+
+`rentPolicyEnabled: false` reproduces V5.6 **exactly** — Phase 1 $781, Phase 2 $845, refinance $894,750, no surplus deployed, balloon equal to the closed-form baseline. 25 engine assertions, all passing.
+
+### Known limitation, deliberately not modelled
+
+The abatement's own expiry lies outside the model's window: a 60% CRA abatement on a 3%-escalating base steps the tax line up roughly **$25,700/yr in year 13** (~$89/unit/month). The dashboard's horizon ends at the buyout, so this is documented rather than displayed, and is the strongest argument for pairing the CRA with the restricted-rent valuation of A.15, which does not expire on a clock.

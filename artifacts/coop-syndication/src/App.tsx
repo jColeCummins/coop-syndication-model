@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/dashboard/Sidebar';
 import { SellerSection } from '@/components/dashboard/SellerSection';
 import { InvestorSection } from '@/components/dashboard/InvestorSection';
 import { TenantSection } from '@/components/dashboard/TenantSection';
+import { FeasibilitySection } from '@/components/dashboard/FeasibilitySection';
 import { MethodologyFootnote } from '@/components/dashboard/MethodologyFootnote';
 import { Building2 } from 'lucide-react';
 
@@ -56,6 +57,7 @@ export default function App() {
             <SellerSection model={model} tooltips={TOOLTIPS} />
             <InvestorSection model={model} tooltips={TOOLTIPS} />
             <TenantSection model={model} tooltips={TOOLTIPS} />
+            <FeasibilitySection model={model} tooltips={TOOLTIPS} />
           </div>
 
           <MethodologyFootnote />

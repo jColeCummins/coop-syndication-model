@@ -48,6 +48,22 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
           <SliderRow label="CLT ground lease (per unit/yr)" tip="What the co-op pays the land trust each year to lease the land it sits on. Keep it at a stewardship level (~$300–600/unit) — every dollar raises rent. Keep it legally SEPARATE from any CLT management contract: pure land rent is UBIT-exempt for the CLT, but bundling in services can taint that exemption." value={inputs.cltGroundLeasePerUnit} formatter={formatCurrency} min={0} max={1200} step={25} onChange={(v) => update('cltGroundLeasePerUnit', v)} />
         </Group>
 
+        <Group title="Rent Policy & Surplus">
+          <SwitchRow
+            id="rent-policy"
+            label="Hold rent at a policy level"
+            tip={TOOLTIPS.rentPolicy}
+            checked={inputs.rentPolicyEnabled}
+            onChange={(v) => update('rentPolicyEnabled', v)}
+          />
+          <SliderRow label="Policy rent (per month)" tip="What the co-op actually charges, rather than cutting to the bare cost floor. Default $700 = today's rent, so tenants see no increase. If this sits BELOW the cost floor the promise cannot be honored and the dashboard says so — rent rises to the floor regardless." value={inputs.policyMonthlyRent} formatter={formatCurrency} min={400} max={1500} step={25} onChange={(v) => update('policyMonthlyRent', v)} />
+          <SliderRow label="Surplus → extra principal" tip={TOOLTIPS.surplusSplit} value={inputs.surplusToPrincipalPct} formatter={formatPercentInput} min={0} max={100} step={5} onChange={(v) => update('surplusToPrincipalPct', v)} />
+          <SliderRow label="Surplus → capital reserves" tip="Surplus banked as the co-op's own cash for roofs, furnaces and parking. Held by the co-op — deliberately NOT applied against the refinance, because a reserve that gets spent is not a reserve. Most lenders escrow replacement reserves anyway, so this is closer to mandatory than optional on a 1968 building." value={inputs.surplusToReservesPct} formatter={formatPercentInput} min={0} max={100} step={5} onChange={(v) => update('surplusToReservesPct', v)} />
+          <SliderRow label="Stabilized value (for LTV)" tip={TOOLTIPS.stabilizedValue} value={inputs.stabilizedValue} formatter={formatCurrency} min={800000} max={3000000} step={25000} onChange={(v) => update('stabilizedValue', v)} />
+          <SliderRow label="Lender max LTV" tip="The most a Phase-2 lender will advance against appraised value. Conventional affordable multifamily runs 75–80%, but CO-OP BLANKET MORTGAGES are commonly underwritten tighter — a lender cannot easily foreclose and reposition an occupied limited-equity co-op. Set this from a real term sheet, not a conventional benchmark." value={inputs.maxLtvPct} formatter={formatPercentInput} min={40} max={90} step={1} onChange={(v) => update('maxLtvPct', v)} />
+          <SliderRow label="Lender min DSCR" tip="Minimum debt-service coverage: net operating income ÷ debt service. Lenders typically require 1.20–1.25×. Pure cost-recovery rent produces exactly 1.00, which is why a rent policy exists at all." value={inputs.minDscr} formatter={(v) => `${v.toFixed(2)}x`} min={1} max={1.6} step={0.05} onChange={(v) => update('minDscr', v)} />
+        </Group>
+
         <Group title="Seller Profile">
           <SliderRow label="Property value today" tip="What the whole property (land + buildings) would sell for as-is on the open market. Default $1.25M reflects $700 in-place rents, deferred maintenance, and a ~7% Class-C cap rate; a stabilized, renovated value would be higher." value={inputs.totalFMV} formatter={formatCurrency} min={750000} max={3000000} step={25000} onChange={(v) => update('totalFMV', v)} />
           <SliderRow label="Seller's cost basis" tip="What the seller 'paid' in the eyes of the IRS. $475k assumes the 1993 transfer was a purchase or inheritance; if it was a GIFT, the original 1968 cost (~$250k) carries over. Pull the exact figure from the seller's Form 4562 / Schedule E." value={inputs.originalCostBasis} formatter={formatCurrency} min={0} max={1000000} step={5000} onChange={(v) => update('originalCostBasis', v)} />
