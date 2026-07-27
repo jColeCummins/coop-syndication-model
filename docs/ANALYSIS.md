@@ -382,3 +382,50 @@ Recorded here because the model cannot enforce them and they are the difference 
 3. **Multiple paths to a share**: cash, 24–36 month installments, sweat-equity credit, or assistance.
 4. **Admission preference for people who live or work in the village**, so turnover does not quietly move the community upmarket over a generation.
 5. **Shares refund at par, never at market.** This is the mechanism — not the CLT — that has held Greenmont affordable since 1947.
+
+## A.19 V5.9 — cash offer ≠ appraised FMV; plus verdicts on § 179D, § 45L and USDA
+
+### A.19.1 § 179D — Twin Coach is TOO SHORT, not eligible
+
+Earlier shorthand in this project ("garden apartments under 4 stories") was ambiguous. Stated plainly: **§ 179D requires four or more storeys** for residential rental property. The deduction reaches property "within the scope of ASHRAE Standard 90.1," and 90.1 expressly **excludes low-rise residential — three storeys or fewer above grade**. Twin Coach at a maximum of three storeys falls outside 90.1 and is therefore **outside § 179D**. Height disqualifies it. **REJECTED.**
+
+### A.19.2 § 45L — right threshold, wrong calendar: the credit is already gone
+
+§ 45L is the mirror image of § 179D: it applies to dwelling units in buildings of **three storeys or fewer**, which is exactly Twin Coach, and § 45L(b)(2) reaches **substantial reconstruction and rehabilitation**, not only new construction. Multifamily rates run $500–$1,000/unit, rising to $2,500–$5,000/unit where prevailing-wage requirements are met. On the merits this was the right credit for this building.
+
+**But OBBBA (P.L. 119-21, 4 July 2025) accelerated its expiration from 31 Dec 2032 to 30 June 2026**, and a rental unit is "acquired" for § 45L purposes when it is leased. As of this writing (July 2026) that date has passed. **EXPIRED — do not underwrite it.** Recorded here so nobody rediscovers § 45L in six months and mistakes it for live money.
+
+### A.19.3 USDA rural eligibility — an earlier statement in this project was WRONG
+
+An earlier working note asserted that "Greene County sits in the Dayton MSA, which very likely disqualifies on rural eligibility." **That is incorrect and is withdrawn.** The § 520 rural test is:
+
+> an area of **no more than 10,000 residents**; *or* an area of **10,001–20,000 residents** that is **not** located in a Metropolitan Statistical Area.
+
+The MSA exclusion applies **only to the 10,001–20,000 band**. Yellow Springs, at roughly 3,700 residents, sits under the 10,000 threshold outright, so **MSA membership never reaches it**. Eligibility is determined per-address on the USDA eligibility map, not by county, and must be confirmed there — but the population test does not disqualify this property, and the earlier note wrongly closed off a live option.
+
+**§ 515 remains a dead end** (no meaningful new-loan appropriation for years; it survives essentially as preservation/transfer of existing § 515 properties, which Twin Coach is not). **§ 538 is the live programme** — a guarantee of up to 90% of a private lender's loan, permitting terms conventional lenders will not, with tenant income ≤115% AMI at initial occupancy and average project rent ≤30% of 100% AMI.
+
+**The § 538 restrictions do not bind us at all.** At a Dayton-area AMI of $70–90k the rent cap computes to $1,750–2,250/month against our $700–780 — an order of magnitude of headroom — and ≤115% AMI is a high ceiling our residents clear easily. Compare that with LIHTC's 30-year compliance or HOME's Davis-Bacon exposure.
+
+And it attacks the binding constraint directly (ops stack, $700 policy):
+
+| Phase-2 takeout | P2 cost floor | Debt service | DSCR | Financing gap |
+|---|---|---|---|---|
+| Conventional 7% / 30yr | $698 | $65,553 | 1.01 | $132,203 |
+| CDFI 6.25% / 35yr | $672 | $57,845 | 1.14 | $40,410 |
+| **§ 538 6.0% / 40yr** | $659 | $54,213 | **1.22** | **$0** |
+| § 538 5.5% / 40yr | $647 | $50,819 | 1.30 | $0 |
+
+**A § 538-guaranteed takeout closes the financing gap on its own, with no grants.** That makes confirming the address on USDA's eligibility map, and identifying an approved § 538 lender, the highest-value outstanding diligence item in the deal — ahead of the grant applications.
+
+### A.19.4 Cash offer decoupled from appraised FMV (`cashOfferPrice`)
+
+The comparison previously assumed a cash buyer pays appraised FMV. Real cash offers routinely land 5–15% below appraisal: the buyer prices speed, certainty, as-is condition and their own required return, while an appraisal assumes reasonable exposure time a quick sale never gets. New input `cashOfferPrice` (**0 = use FMV**, so the default reproduces prior behaviour exactly) drives **only** the straight-cash row — never the § 170 donation, never the co-op's contract price.
+
+The effect is large. At FMV $1.8M with a real $1.6M cash offer, the note moves from **$59,152 behind** a straight cash sale to **$76,248 ahead** — a **$135,400 swing** — because the honest question is "the note versus the cash Paul can *actually get*," not "the note versus a theoretical appraisal."
+
+**Two cautions carried in the tooltip.** (1) A contemporaneous arm's-length cash offer is *evidence of fair market value*; claiming a high FMV to support a large charitable deduction while accepting a materially lower price is a pattern the IRS scrutinises hard, and the land appraisal must stand on its own facts. (2) There is nonetheless a legitimate reason the parts need not sum to the whole: the co-op buys **improvements on leased land**, and a leasehold interest is generally worth less than a fee-simple residual. The donated parcel and the sold improvements each require their own appraisal — neither should be derived by subtracting from the other.
+
+### A.19.5 Cash at closing
+
+Added `cashAtClosing` to every comparison scenario and a column to the seller table. NPV and terminal wealth answer "what am I worth in the end"; sellers usually ask "what do I bank next month" first, and the installment note's answer is deliberately much smaller (down payment less Year-1 tax and legal/title) with the remainder arriving over the term with interest. At FMV $1.8M / $1.6M offer: straight cash **$1,120,485**, cash+donation **$1,120,683**, installment **$236,517**. Showing this honestly is better than letting a seller discover it at the closing table.
