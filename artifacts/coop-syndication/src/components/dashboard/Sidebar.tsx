@@ -48,6 +48,12 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
           <SliderRow label="CLT ground lease (per unit/yr)" tip="What the co-op pays the land trust each year to lease the land it sits on. Keep it at a stewardship level (~$300–600/unit) — every dollar raises rent. Keep it legally SEPARATE from any CLT management contract: pure land rent is UBIT-exempt for the CLT, but bundling in services can taint that exemption." value={inputs.cltGroundLeasePerUnit} formatter={formatCurrency} min={0} max={1200} step={25} onChange={(v) => update('cltGroundLeasePerUnit', v)} />
         </Group>
 
+        <Group title="Member Shares & Buy-In">
+          <SliderRow label="Member share price" tip={TOOLTIPS.memberShares} value={inputs.memberSharePrice} formatter={formatCurrency} min={0} max={6000} step={250} onChange={(v) => update('memberSharePrice', v)} />
+          <SliderRow label="Households buying in at closing" tip="Share of the 25 homes whose members purchase at closing. Below 100% is the EXPECTED case, not a failure — non-purchasing households remain residents at the same rent and can join later. Buying a share must never be a condition of staying; a conversion inherits its residents, and screening them out is the gentrification failure mode this whole structure exists to prevent." value={inputs.memberShareParticipationPct} formatter={formatPercentInput} min={0} max={100} step={5} onChange={(v) => update('memberShareParticipationPct', v)} />
+          <SliderRow label="Shares needing assistance" tip={TOOLTIPS.shareAssistance} value={inputs.shareAssistancePct} formatter={formatPercentInput} min={0} max={100} step={5} onChange={(v) => update('shareAssistancePct', v)} />
+        </Group>
+
         <Group title="Rent Policy & Surplus">
           <SwitchRow
             id="rent-policy"

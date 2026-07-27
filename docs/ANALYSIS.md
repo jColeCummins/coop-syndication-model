@@ -345,3 +345,40 @@ Full write-up in **docs/COMPARABLE-GREENMONT.md** (sources and retrieval date re
 5. **We cannot underwrite by selection.** Greenmont admits on FICO ≥630, income minimums, DTI ≤40%, and clean criminal/bankruptcy records. A conversion-in-place inherits its residents, so our credit and collection risk is structurally higher. The 4% vacancy/bad-debt allowance is likely optimistic for the transition years and reserves should sit at the deeper end — raised here as a defaults question, deliberately **not** changed unilaterally.
 
 Also confirming A.15: Greenmont carries property taxes inside its dues. An 84-year-old non-profit housing cooperative in the same metro is on the tax rolls, which is real-world evidence that the ORC 5709.12 charitable-exemption path is a long shot and the CRA / restricted-rent-valuation route is the realistic one.
+
+## A.18 V5.8 — member share capital, priced against displacement risk
+
+Builds the lever quantified in A.17 and prices it deliberately **below** the Greenmont benchmark. Three inputs: `memberSharePrice` ($2,000), `memberShareParticipationPct` (80%), `shareAssistancePct` (40%).
+
+### Why $2,000 and not $3,500
+
+Greenmont charges $3,500 (docs/COMPARABLE-GREENMONT.md), but Greenmont **admits by selection** — FICO ≥630, income minimums, DTI ≤40%. A conversion-in-place inherits its residents and cannot screen, which is the entire point. At the $700 policy rent, $3,500 is 4.6 months of rent; **$2,000 is 2.6 months**, or $83/mo over 24 months and $56/mo over 36. The share price is the gentrification lever in this structure: set it where sitting tenants can reach it, or the project becomes the thing it exists to prevent.
+
+### Mechanics
+
+Member equity is applied at closing **before** grant money, because it is committed and certain while grants are speculative. It replaces investor capital 1:1, earns **no preferred return**, is refundable **at par** on exit (limited equity — no appreciation), and is **not** repaid at the buyout, so it permanently shrinks the Phase-2 refinance. Total is clamped at the deal's capital need, with a UI warning when a price exceeds what the co-op can productively absorb.
+
+### Engine-verified effect ($2,000 × 80% of 25 homes = $40,000)
+
+| | without shares | with shares |
+|---|---|---|
+| Investor capital | $303,000 | $263,000 |
+| Investor IRR (REPS) | 7.3% | **8.5%** |
+| Phase-1 cost floor | $781 | $771 |
+| Phase-2 cost floor | $845 | $833 |
+| Phase-2 refinance | $894,750 | $854,750 |
+| Financing gap | $149,125 | $142,458 |
+
+**Read this honestly: $40,000 moves the rent floor only about $10/unit/month.** Member shares are not primarily a rent lever at this price — the pref they displace is small. Their real value is $40,000 straight off the Year-5 takeout and +1.2 points of investor IRR, which is takeout de-risking and investor compensation rather than affordability. Anyone presenting this to members should say so plainly; overselling the rent effect would be a false promise.
+
+**The assistance ask is small and that is the good news.** At 40% of shares, outside help totals **$16,000** — a realistic request to the Yellow Springs Community Foundation, Home Inc., or a revolving share-loan fund, and two orders of magnitude easier than the ~$315k grant target. A revolving fund is the strongest form: because shares refund at par, departing members repay the fund and it recycles to the next household that needs it.
+
+### Anti-displacement terms (deal documents, not model inputs)
+
+Recorded here because the model cannot enforce them and they are the difference between this structure and a displacement:
+
+1. **Buying a share is never a condition of staying.** Non-purchasing households remain residents at the **same rent** and may join later. Participation below 100% is the expected case, not a failure — hence an 80% default rather than 100%.
+2. **No screening of sitting tenants** — no income minimum, no credit score, no background requirement. This is the sharpest departure from Greenmont, and it is intentional.
+3. **Multiple paths to a share**: cash, 24–36 month installments, sweat-equity credit, or assistance.
+4. **Admission preference for people who live or work in the village**, so turnover does not quietly move the community upmarket over a generation.
+5. **Shares refund at par, never at market.** This is the mechanism — not the CLT — that has held Greenmont affordable since 1947.

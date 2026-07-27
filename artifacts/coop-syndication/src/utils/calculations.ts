@@ -99,6 +99,19 @@ export interface DealInputs {
   stabilizedValue: number;           // $ post-renovation appraised value, for LTV
   maxLtvPct: number;                 // lender's max loan-to-value
   minDscr: number;                   // lender's min debt-service coverage ratio
+  // Member share capital. Replaces investor capital 1:1 and earns NO preferred
+  // return, so every share dollar lowers rent in both phases. It is refundable
+  // AT PAR on exit (limited equity — no appreciation), which is what keeps the
+  // co-op affordable across generations.
+  //
+  // ANTI-DISPLACEMENT GUARDRAIL — the share price is the gentrification risk in
+  // this whole structure. A price that screens out sitting tenants defeats the
+  // purpose. Participation below 100% is the NORMAL case and is not a failure:
+  // non-purchasing households remain residents at the same rent and may join
+  // later. Buying a share must never be a condition of staying.
+  memberSharePrice: number;          // $/unit one-time share
+  memberShareParticipationPct: number; // % of units purchasing at closing
+  shareAssistancePct: number;        // % of those shares needing outside help
   // Seller Profile
   totalFMV: number;
   originalCostBasis: number;
@@ -193,6 +206,12 @@ export const DEFAULT_INPUTS: DealInputs = {
   stabilizedValue: 1450000,     // post-renovation value; CONFIRM WITH APPRAISAL
   maxLtvPct: 75,                // co-op blanket loans often stricter — see tooltip
   minDscr: 1.2,
+  // $2,000 chosen deliberately BELOW the $3,500 Greenmont benchmark
+  // (docs/COMPARABLE-GREENMONT.md): ~2.9 months of rent here, reachable on an
+  // installment plan, and low enough not to price out sitting tenants.
+  memberSharePrice: 2000,
+  memberShareParticipationPct: 80, // day-one buy-in; the rest join later
+  shareAssistancePct: 40,          // share needing YS Community Foundation help
   totalFMV: 1250000,
   originalCostBasis: 475000,
   accumulatedDepreciation: 356250,
@@ -428,6 +447,27 @@ export interface SurplusPlan {
 }
 
 /**
+ * Member share capital and the affordability of buying in. The share price is
+ * the gentrification lever in this structure: it lowers rent for everyone, but
+ * only if sitting tenants can actually reach it. Reports the outside assistance
+ * required so the ask to a community foundation is sized, not assumed.
+ */
+export interface MemberEquityPlan {
+  sharePrice: number;
+  participationPct: number;
+  unitsPurchasing: number;
+  totalRaised: number;              // clamped at the capital need
+  assistanceNeeded: number;         // the community-foundation ask
+  memberFunded: number;             // raised out of members' own pockets
+  monthsOfRent: number;             // share price ÷ rent actually charged
+  installment24: number;            // $/mo if spread over 24 months
+  installment36: number;            // $/mo if spread over 36 months
+  prefAvoided: number;              // annual pref this equity displaces
+  rentReliefPerUnitMonth: number;   // that pref, per unit per month
+  clampedByCapitalNeed: boolean;    // shares exceed what the deal needs
+}
+
+/**
  * Can the co-op actually GET the Year-5 loan? Tests the refinance burden against
  * both lender constraints and reports the dollar gap — which is the real grant
  * target, sized rather than guessed.
@@ -497,6 +537,7 @@ export interface DealMetrics {
   seller: SellerMetrics;
   investor: InvestorMetrics;
   tenant: TenantMetrics;
+  memberEquity: MemberEquityPlan;
   surplus: SurplusPlan;
   feasibility: FeasibilityMetrics;
   amortSchedule: AmortRow[];
@@ -556,6 +597,10 @@ export const TOOLTIPS = {
     'ON: investors are paid their return each year from rents. OFF: the return accrues and is paid at the buyout instead — Phase-1 rents drop by the pref amount, and the buyout loan grows by the accrued total. Same investor economics, shifted in time; this is the tenant-affordability relief valve.',
   escalators:
     'Operating costs inflate: water/sewer 8%/yr (village ordinance through 2027, PFAS pressure after), insurance 8%/yr, property taxes and management 3%/yr, other lines 2.5%/yr. Phase-2 rent is computed on buyout-year costs — flat-cost models understate it badly.',
+  memberShares:
+    'A one-time share each member buys to join the co-op. It replaces investor capital dollar-for-dollar and earns NO preferred return, so every share dollar lowers rent in BOTH phases and shrinks the Year-5 refinance. Refundable at par when a member leaves (limited equity — no appreciation), which is precisely what keeps the co-op affordable across generations: Greenmont Mutual Housing in Kettering has stayed affordable since 1947 because members cannot sell their units at a profit. THE SHARE PRICE IS THE GENTRIFICATION RISK IN THIS DEAL. $2,000 is set deliberately below Greenmont\'s $3,500 because a price sitting tenants cannot reach would convert an anti-displacement project into a displacement one. Four rules the deal documents must carry: (1) buying a share is NEVER a condition of staying — non-purchasing households remain residents at the SAME rent and may join later; (2) offer installments (24–36 months), sweat-equity credit, and a share-assistance fund; (3) no income minimum, no credit score, no screening of sitting tenants — a conversion inherits its residents, unlike Greenmont, which admits on FICO and income floors; (4) give admission preference to people who live or work in the village, so turnover does not quietly move the community upmarket.',
+  shareAssistance:
+    'The share of member equity that outside money must cover so nobody is priced out — the ask to the Yellow Springs Community Foundation, Home Inc., or a revolving share-loan fund. Sizing this explicitly is the difference between a real affordability plan and a hope: it converts "some people will need help" into a dollar figure a foundation can actually consider. Assistance money behaves like member equity in the model (it replaces investor capital and earns no preferred return); it differs only in who wrote the cheque. A revolving fund is the strongest version — shares are refundable at par, so as members leave, the fund is repaid and recycles to the next household that needs it.',
   rentPolicy:
     'Cost-recovery rent is a FLOOR, not a target. Charging exactly the floor means the property earns precisely its debt service — a debt-service coverage ratio of 1.00 — and no lender refinances a break-even building. Setting a policy rent at or above the floor (default: today\'s $700, so tenants see no increase) produces a surplus that is simultaneously the affordability promise and the lender\'s coverage cushion. The surplus is spent on the three sliders below. Turn this OFF to see the pure cost-recovery floor the earlier versions reported.',
   surplusSplit:
@@ -589,6 +634,7 @@ export const METHODOLOGY: string[] = [
   'Seller tax: recognized gain = collected principal × gross profit ratio, 25%-rate unrecaptured § 1250 dollars first (Reg. § 1.453-12), then 15%/20% LTCG split at the 2026 filing-status breakpoint ($613,700 MFJ / $533,400 single). NIIT (3.8%) applies over $250k/$200k MAGI automatically. § 170: 30%-of-AGI annual limit, 0.5%-of-AGI OBBBA floor (disallowed amounts never carry), six usable years. Ohio: flat rate, no charitable deduction; with the CPA-confirmed toggle, the Business Income Deduction exempts the first $250k/yr and taxes the rest at 3%. Municipal tax cannot reach interest or gains (ORC 718).',
   'Investor: depreciable base = contract price + new CapEx; 100% bonus (§ 168(k)/OBBBA) on the 5/15-yr classes including a 25% cost-seg reclass; 27.5-yr straight line on the shell (full-year convention). REPS losses offset W-2 annually with a § 199A 20% deduction on positive years; passive losses suspend and release at the takeout (§ 469(g)). Exit tax: gain up to short-life depreciation × the negotiated exit-allocation % is ordinary income; the next tranche to total depreciation is 25%; the rest 15%; plus flat state on the gain. Ohio during the hold: BID zeroes profit-year state tax; without BID the 5/6 bonus addback applies. IRR/equity multiple/payback are post-tax.',
   'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate at adjustable long-run AVERAGE rates (defaults: utilities 5.5%, insurance 5%, taxes/management 3%, others 2.5% — blends, not the near-term 8% ordinance/hard-market spikes); an optional CRA / restricted-rent property-tax abatement (off by default) haircuts the tax line for a set term and reverts to full escalated tax after. Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, amortized over the configurable Phase-2 bank term, default 30 yr). The rent-cliff alert compares Phase 2 to Phase 1 on that basis — an abatement expiring between the phases widens that cliff.',
+  'Member share capital: a one-time per-unit share, applied at closing BEFORE speculative grant money because it is committed and certain. It replaces investor capital dollar-for-dollar and earns no preferred return, so the pref it displaces is rent relief in both phases; it is refundable at par on exit (limited equity), and it is NOT repaid at the buyout, so it permanently shrinks the Phase-2 refinance. Participation below 100% is the expected case — non-purchasing households remain residents at the same rent. The engine clamps total shares at the deal\'s capital need and reports the outside assistance required at the chosen assistance percentage, sizing the community-foundation ask rather than assuming it away. Anti-displacement guardrails (no share requirement to stay, no screening of sitting tenants, installments and assistance offered, local-worker admission preference) are deal-document terms, not model inputs, and are recorded in ANALYSIS.md A.18.',
   'Rent policy and surplus: cost-recovery rent is reported as a FLOOR. When a policy rent is set (default: today\'s $700), the difference is a surplus deployed across extra seller-note principal (applied annually at year end, shrinking the balloon and therefore the Phase-2 refinance), a capital reserve balance held by the co-op (deliberately NOT netted against the refinance — a reserve that is spent is not a reserve), and non-redeemable shadow equity crediting members for the capital their above-floor rent contributes. Surplus accrues only in years 1..buyout, while the seller note is outstanding. A policy rent below the floor is reported as a shortfall and deploys nothing.',
   'Phase-2 financing feasibility: the refinance is tested against BOTH lender constraints — maximum loan-to-value on the stabilized appraised value, and minimum debt-service coverage on buyout-year net operating income — and the supportable loan is the lesser. Any excess of the refinance burden over that amount is reported as a financing gap, which sizes the grant/equity requirement rather than leaving it to assumption. Under pure cost-recovery rent DSCR is exactly 1.00 by construction, which is precisely why a rent policy exists. Co-op blanket mortgages are commonly underwritten more conservatively than conventional multifamily; the LTV input should be set from a real lender term sheet, not a conventional benchmark.',
   'Defaults (July 2026 re-underwrite): FMV $1.25M as-is (in-place $700 rents, deferred maintenance, ~7% Class-C village cap; $1.5M is the stabilized number). Land donation $430k = the largest gift fully absorbed inside the § 170 window at these settings (30% of FMV absorbs with slack; 40% strands deduction). Basis $475k stepped-up story — confirm from the seller\'s Form 4562; a gift transfer means ~$250k carryover instead.',
@@ -691,10 +737,18 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const grantsRequested =
     inputs.grantEnergyRebates + inputs.grantCountyHome + inputs.grantOhioTrust + inputs.grantFhlbAhp;
   const capitalNeed = downPayment + totalNewCapex;
+  // Member shares are committed at closing and certain, so they are applied
+  // BEFORE speculative grant money. They earn no preferred return, which is
+  // exactly why each share dollar lowers rent in both phases.
+  const memberEquityRaised = Math.min(
+    inputs.memberSharePrice * inputs.units * clamp01(inputs.memberShareParticipationPct / 100),
+    capitalNeed,
+  );
+  const capitalAfterShares = capitalNeed - memberEquityRaised;
   const grantsAtClosingApplied = inputs.grantsAtClosing
-    ? Math.min(grantsRequested, capitalNeed)
+    ? Math.min(grantsRequested, capitalAfterShares)
     : 0;
-  const capitalRequired = capitalNeed - grantsAtClosingApplied;
+  const capitalRequired = capitalAfterShares - grantsAtClosingApplied;
   const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
   const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
   const accruedPrefAtExit = inputs.prefCurrentPay ? 0 : prefAnnual * lastNoteYear;
@@ -963,6 +1017,32 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     balloonReduction: Math.max(0, balloonNoPolicy - balloonBalance),
   };
 
+  // ---- Member equity plan (reported) ------------------------------------------
+  // Rent relief is the preferred return this equity displaces: member capital
+  // earns no pref, so the pref that WOULD have been paid on it is money that
+  // never has to come out of rent.
+  const unitsPurchasing = inputs.units * clamp01(inputs.memberShareParticipationPct / 100);
+  const prefAvoided = memberEquityRaised * (inputs.investorPrefReturn / 100);
+  const rentCharged = effectivePhase1Rent > 0 ? effectivePhase1Rent : inputs.currentRent;
+  const memberEquity: MemberEquityPlan = {
+    sharePrice: inputs.memberSharePrice,
+    participationPct: inputs.memberShareParticipationPct,
+    unitsPurchasing,
+    totalRaised: memberEquityRaised,
+    assistanceNeeded: memberEquityRaised * clamp01(inputs.shareAssistancePct / 100),
+    memberFunded: memberEquityRaised * (1 - clamp01(inputs.shareAssistancePct / 100)),
+    monthsOfRent: rentCharged > 0 ? inputs.memberSharePrice / rentCharged : 0,
+    installment24: inputs.memberSharePrice / 24,
+    installment36: inputs.memberSharePrice / 36,
+    prefAvoided,
+    rentReliefPerUnitMonth:
+      inputs.prefCurrentPay && inputs.units > 0
+        ? prefAvoided / inputs.units / 12 / occupancy
+        : 0,
+    clampedByCapitalNeed:
+      inputs.memberSharePrice * unitsPurchasing > capitalNeed + 0.5,
+  };
+
   // ---- Phase-2 financing feasibility ------------------------------------------
   // The takeout test the model used to skip entirely. Revenue is measured at the
   // POLICY rent when one is set; under pure cost recovery, revenue equals the
@@ -1033,7 +1113,7 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     lastNoteYear,
   });
 
-  return { inputs, seller, investor, tenant, surplus, feasibility, amortSchedule };
+  return { inputs, seller, investor, tenant, memberEquity, surplus, feasibility, amortSchedule };
 }
 
 // ----------------------------------------------------------------------------
