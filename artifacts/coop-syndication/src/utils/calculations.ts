@@ -194,13 +194,13 @@ export interface DealInputs {
 export const DEFAULT_INPUTS: DealInputs = {
   units: 25,
   currentRent: 700,
-  vacancyRate: 4,
+  vacancyRate: 6,              // conversion years: inherited residents, no screening (A.22)
   propertyTaxes: 30000,
   annualInsuranceMisc: 22500,
   mgmtFeePerDoor: 50,
   repairsMaintPerUnit: 1200,
   utilitiesPerUnit: 1500,
-  reservesPerUnit: 400,
+  reservesPerUnit: 550,        // 1968 building; $400 was thin and lenders escrow reserves
   cltGroundLeasePerUnit: 300, // ~$25/unit/mo stewardship fee; see TOOLTIPS.groundLease
   // Blended long-run averages (was flat 8% for utilities/insurance in perpetuity):
   escUtilities: 5.5,          // ~8% locked through 2027 tapering to ~4% (PFAS tail)
@@ -247,7 +247,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   phase2AmortYears: 30,
   stateTaxRate: 2.75,
   localTaxRate: 1.5,
-  ohioBIDConfirmed: true,
+  ohioBIDConfirmed: false,     // CPA-CONFIRM means do not assume it — upside, not base case
   grantsAtClosing: false,
   grantEnergyRebates: 0,
   grantCountyHome: 0,
@@ -256,7 +256,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   investorPrefReturn: 7,
   prefCurrentPay: true,
   investorMarginalRate: 35,
-  investorHasREPS: true,
+  investorHasREPS: false,      // passive is the honest base case; REPS is a named-investor fact
   exitShortLifeAllocationPct: 50,
   capexRoofStruct: 90000,
   capexParkingLand: 50000,
@@ -274,6 +274,11 @@ export const TAX_POLICY = {
   NIIT_MAGI_THRESHOLD: { single: 200000, mfj: 250000 } as Record<FilingStatus, number>,
   CHARITY_AGI_LIMIT: 0.30,
   CHARITY_FLOOR_AGI: 0.005,      // OBBBA floor, contributions after 12/31/2025
+  // OBBBA also caps the VALUE of itemized deductions for top-bracket payers:
+  // the benefit is haircut to roughly 35 cents on the dollar rather than 37.
+  // Modeled as a ceiling on the rate at which a charitable dollar offsets
+  // ORDINARY income. Non-binding below the 37% bracket (default seller is 24%).
+  CHARITABLE_BENEFIT_CAP: 0.35,
   CHARITY_USABLE_YEARS: 6,       // contribution year + 5-yr carryforward
   QBI_DEDUCTION: 0.20,           // § 199A on qualified rental income
   RESIDENTIAL_LIFE: 27.5,
@@ -928,7 +933,8 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     dedLeft -= ded20;
     const ded15 = Math.min(dedLeft, g15);
 
-    const fedOrdinaryTax = (interest - dedOrd) * ordRate; // may go negative
+    const charRate = Math.min(ordRate, T.CHARITABLE_BENEFIT_CAP);
+    const fedOrdinaryTax = interest * ordRate - dedOrd * charRate; // may go negative
     const fedGainTax =
       (g25base - ded25) * T.UNRECAP_1250_RATE +
       (g20 - ded20) * T.LTCG_RATE_HIGH +
@@ -1211,7 +1217,7 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
     dedLeft -= ded20;
     const ded15 = Math.min(dedLeft, g15);
     const fed =
-      -dedOrd * ctx.ordRate +
+      -dedOrd * Math.min(ctx.ordRate, T.CHARITABLE_BENEFIT_CAP) +
       (g25base - ded25) * T.UNRECAP_1250_RATE +
       (g20 - ded20) * T.LTCG_RATE_HIGH +
       (g15 - ded15) * T.LTCG_RATE_LOW;
@@ -1270,7 +1276,7 @@ function buildSellerComparison(inputs: DealInputs, ctx: ComparisonCtx): SellerMe
   for (let year = 2; year <= T.CHARITY_USABLE_YEARS && carry > 0; year++) {
     const d = drawWithFloor(carry, inputs.sellerOtherIncome);
     carry -= d.draw;
-    const benefit = d.deduction * ctx.ordRate;
+    const benefit = d.deduction * Math.min(ctx.ordRate, T.CHARITABLE_BENEFIT_CAP);
     bifNominal += benefit;
     bifNpv += benefit / Math.pow(1 + ctx.disc, year - 1);
     bifTaxTotal -= benefit;
