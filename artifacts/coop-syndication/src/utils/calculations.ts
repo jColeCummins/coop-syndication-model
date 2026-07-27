@@ -42,6 +42,17 @@
 
 import { pmt, remainingBalance, irr, npv } from './finance';
 
+/** Clamp a share to [0,1] — surplus splits must never over- or under-allocate. */
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
+
+/** Present value of a level annuity — inverse of pmt(), for max-supportable-loan. */
+function pvOfAnnuity(annualRate: number, months: number, monthlyPayment: number): number {
+  const i = annualRate / 12;
+  if (months <= 0 || monthlyPayment <= 0) return 0;
+  if (i === 0) return monthlyPayment * months;
+  return (monthlyPayment * (1 - Math.pow(1 + i, -months))) / i;
+}
+
 // ----------------------------------------------------------------------------
 // Inputs
 // ----------------------------------------------------------------------------
@@ -74,6 +85,20 @@ export interface DealInputs {
   // the full escalated tax snaps back in the first post-abatement year.
   propertyTaxAbatementPct: number;   // % reduction of the property-tax line, 0–100
   propertyTaxAbatementYears: number; // term of years the reduction applies (from Y1)
+  // Rent policy & surplus deployment. Cost-recovery rent is a FLOOR, not a
+  // target: charging it exactly makes NOI equal debt service (DSCR 1.00), which
+  // no lender will refinance. Holding rent at a policy level at or above the
+  // floor produces a surplus that is both the affordability promise and the
+  // underwriting cushion. Surplus splits three ways; shadow equity takes the
+  // remainder so the three shares always total 100%.
+  rentPolicyEnabled: boolean;        // false = pure cost-recovery (legacy behaviour)
+  policyMonthlyRent: number;         // $/mo the co-op actually charges in Phase 1
+  surplusToPrincipalPct: number;     // % of surplus → extra seller-note principal
+  surplusToReservesPct: number;      // % of surplus → capital reserve account
+  // Phase-2 financing feasibility — the takeout test the model used to skip.
+  stabilizedValue: number;           // $ post-renovation appraised value, for LTV
+  maxLtvPct: number;                 // lender's max loan-to-value
+  minDscr: number;                   // lender's min debt-service coverage ratio
   // Seller Profile
   totalFMV: number;
   originalCostBasis: number;
@@ -158,6 +183,16 @@ export const DEFAULT_INPUTS: DealInputs = {
   escGeneral: 2.5,
   propertyTaxAbatementPct: 0,   // off by default — abatement is applied for, not assumed
   propertyTaxAbatementYears: 12, // typical Ohio CRA term for residential rehab
+  // Rent policy: hold rent at today's $700 rather than cutting to the cost
+  // floor, and spend the difference on the balloon, reserves, and member
+  // recognition. Turn OFF to see the pure cost-recovery floor.
+  rentPolicyEnabled: true,
+  policyMonthlyRent: 700,       // today's rent — tenants see no increase
+  surplusToPrincipalPct: 60,    // extra principal shrinks the Year-5 takeout
+  surplusToReservesPct: 25,     // 1968 building; lenders escrow reserves anyway
+  stabilizedValue: 1450000,     // post-renovation value; CONFIRM WITH APPRAISAL
+  maxLtvPct: 75,                // co-op blanket loans often stricter — see tooltip
+  minDscr: 1.2,
   totalFMV: 1250000,
   originalCostBasis: 475000,
   accumulatedDepreciation: 356250,
@@ -359,6 +394,63 @@ export interface InvestorMetrics {
   optimalWhen: string[];
 }
 
+/**
+ * What holding rent above the cost-recovery floor buys. Cost-recovery rent is a
+ * floor, not a target: charging it exactly pins DSCR at 1.00 and makes the
+ * Year-5 takeout unfinanceable. The surplus is simultaneously the affordability
+ * promise (rent held flat) and the lender's coverage cushion.
+ */
+export interface SurplusPlan {
+  enabled: boolean;
+  policyMonthlyRent: number;
+  costFloorMonthlyRent: number;    // what break-even would have required
+  annualRevenueAtPolicy: number;
+  phase1RequiredRevenue: number;
+  annualSurplus: number;           // never negative — see policyBelowCostFloor
+  // The policy is a floor on RENT, not a cap: the co-op charges the greater of
+  // the policy and its cost floor, so these are what tenants actually pay.
+  effectivePhase1Rent: number;
+  effectivePhase2Rent: number;
+  policyBelowCostFloor: boolean;   // true = the $700 promise cannot be honored
+  shortfallPerUnitMonth: number;   // how far above the policy rent must go
+  years: number;                   // surplus runs years 1..balloonYear
+  toPrincipalPerYear: number;
+  toReservesPerYear: number;
+  toShadowEquityPerYear: number;
+  principalPct: number;
+  reservesPct: number;
+  shadowEquityPct: number;         // the remainder — always totals 100%
+  extraPrincipalTotal: number;
+  reservesBalanceAtBuyout: number;
+  shadowEquityAtBuyout: number;
+  balloonWithoutPolicy: number;
+  balloonReduction: number;
+}
+
+/**
+ * Can the co-op actually GET the Year-5 loan? Tests the refinance burden against
+ * both lender constraints and reports the dollar gap — which is the real grant
+ * target, sized rather than guessed.
+ */
+export interface FeasibilityMetrics {
+  stabilizedValue: number;
+  refinanceBurden: number;
+  ltv: number;
+  maxLtv: number;
+  ltvPass: boolean;
+  phase2NOI: number;
+  phase2DebtService: number;
+  dscr: number;
+  minDscr: number;
+  dscrPass: boolean;
+  phase1Dscr: number;
+  maxLoanByLtv: number;
+  maxLoanByDscr: number;
+  supportableLoan: number;
+  financingGap: number;            // >0 = the deal cannot refinance as configured
+  bindingConstraint: 'ltv' | 'dscr';
+}
+
 export interface OpexBreakdown {
   propertyTaxes: number;
   insurance: number;
@@ -405,6 +497,8 @@ export interface DealMetrics {
   seller: SellerMetrics;
   investor: InvestorMetrics;
   tenant: TenantMetrics;
+  surplus: SurplusPlan;
+  feasibility: FeasibilityMetrics;
   amortSchedule: AmortRow[];
 }
 
@@ -462,6 +556,16 @@ export const TOOLTIPS = {
     'ON: investors are paid their return each year from rents. OFF: the return accrues and is paid at the buyout instead — Phase-1 rents drop by the pref amount, and the buyout loan grows by the accrued total. Same investor economics, shifted in time; this is the tenant-affordability relief valve.',
   escalators:
     'Operating costs inflate: water/sewer 8%/yr (village ordinance through 2027, PFAS pressure after), insurance 8%/yr, property taxes and management 3%/yr, other lines 2.5%/yr. Phase-2 rent is computed on buyout-year costs — flat-cost models understate it badly.',
+  rentPolicy:
+    'Cost-recovery rent is a FLOOR, not a target. Charging exactly the floor means the property earns precisely its debt service — a debt-service coverage ratio of 1.00 — and no lender refinances a break-even building. Setting a policy rent at or above the floor (default: today\'s $700, so tenants see no increase) produces a surplus that is simultaneously the affordability promise and the lender\'s coverage cushion. The surplus is spent on the three sliders below. Turn this OFF to see the pure cost-recovery floor the earlier versions reported.',
+  surplusSplit:
+    'Where the surplus goes. EXTRA PRINCIPAL pays down the seller note faster, shrinking the Year-5 balloon and therefore the refinance — the highest-return use, because it retires debt at the note rate. RESERVES accumulate as the co-op\'s own cash for roofs and furnaces; a 1968 building needs them and most lenders escrow them anyway, so this money is not really optional. SHADOW EQUITY (the remainder) credits members for the capital their above-floor rent contributes. Keep shadow equity NON-REDEEMABLE or deeply capped: a redeemable member claim is a balance-sheet liability a refinance lender will discount, and it can collide with the CLT ground-lease resale formula. CPA must confirm it does not disturb Subchapter T / § 216 treatment.',
+  feasibility:
+    'Can the co-op actually GET the Year-5 loan? Two tests, and the loan is the smaller of what each allows. LTV: the loan cannot exceed the lender\'s share of appraised value — note that co-op blanket mortgages are underwritten more conservatively than conventional multifamily, because a lender cannot easily foreclose and reposition an occupied limited-equity co-op, so do not assume a 75-80% conventional advance. DSCR: net operating income must exceed debt service by the lender\'s margin (1.20-1.25x typical). Under pure cost-recovery rent, DSCR pins at exactly 1.00 by construction — that is the honest finding, not a rounding artifact. Any FINANCING GAP shown is the dollar amount the deal must close with grants, member equity, a longer seller note, or a smaller investor check. This is the deal\'s single largest risk and earlier versions did not test it at all.',
+  stabilizedValue:
+    'The post-renovation appraised value the Phase-2 lender will underwrite against — NOT today\'s as-is value and NOT the purchase price. It must be supported by an appraisal at refinance. Two cautions specific to this deal: the CLT ground lease means the co-op owns improvements on leased land, which some appraisers value below fee simple; and restricted, at-cost rents produce a lower income-approach value than market comps would. A conservative number here is a feature, not pessimism.',
+  shadowEquity:
+    'Tenants paying above the cost floor are contributing real capital, and recognizing that is fair. This tracks the accumulated credit. Keep it non-redeemable or deeply capped and vest it over years: a cash-redemption right turns member recognition into a liability that reduces what a lender will advance, and may conflict with the ground lease\'s resale formula. Recognition and retention benefits carry most of the fairness at none of the financing cost.',
   propertyTaxAbatement:
     'A negotiated reduction of the property-tax LINE ONLY for a set term — it lowers tenant rent while it runs and touches nothing on the seller or investor side. 0% = not yet won. Two realistic Ohio paths: (1) a Community Reinvestment Area abatement (ORC 3735.65) on the renovation value — municipality-designated, commonly 10–15 years, up to 100% of the improvement\'s added value; the co-op applies after the rehab is placed in service. (2) A restricted-rent / income-approach valuation at the county auditor (ORC 5713.03; Ohio Admin. Code 5703-25-20, eff. 1/1/2026, for federally-subsidized housing), which values the property on its actually-collectible at-cost rents rather than market comps — appealed to the Board of Revision under ORC 5715.19 if the auditor won\'t grant it. Model it as a haircut on the tax line for the years you expect it to hold, then it snaps back to full escalated tax. Applies to the property-tax component of both Phase-1 and Phase-2 rent (Phase 2 only if the buyout year is still inside the term). Do not underwrite closing on an abatement that has not been granted.',
   maxDonation:
@@ -485,6 +589,8 @@ export const METHODOLOGY: string[] = [
   'Seller tax: recognized gain = collected principal × gross profit ratio, 25%-rate unrecaptured § 1250 dollars first (Reg. § 1.453-12), then 15%/20% LTCG split at the 2026 filing-status breakpoint ($613,700 MFJ / $533,400 single). NIIT (3.8%) applies over $250k/$200k MAGI automatically. § 170: 30%-of-AGI annual limit, 0.5%-of-AGI OBBBA floor (disallowed amounts never carry), six usable years. Ohio: flat rate, no charitable deduction; with the CPA-confirmed toggle, the Business Income Deduction exempts the first $250k/yr and taxes the rest at 3%. Municipal tax cannot reach interest or gains (ORC 718).',
   'Investor: depreciable base = contract price + new CapEx; 100% bonus (§ 168(k)/OBBBA) on the 5/15-yr classes including a 25% cost-seg reclass; 27.5-yr straight line on the shell (full-year convention). REPS losses offset W-2 annually with a § 199A 20% deduction on positive years; passive losses suspend and release at the takeout (§ 469(g)). Exit tax: gain up to short-life depreciation × the negotiated exit-allocation % is ordinary income; the next tranche to total depreciation is 25%; the rest 15%; plus flat state on the gain. Ohio during the hold: BID zeroes profit-year state tax; without BID the 5/6 bonus addback applies. IRR/equity multiple/payback are post-tax.',
   'Rent: cost-recovery floor, not market. Phase 1 = seller-note debt service + Year-1 operating costs + investor preferred (when current-pay), ÷ units ÷ 12 ÷ (1 − vacancy). Operating lines escalate at adjustable long-run AVERAGE rates (defaults: utilities 5.5%, insurance 5%, taxes/management 3%, others 2.5% — blends, not the near-term 8% ordinance/hard-market spikes); an optional CRA / restricted-rent property-tax abatement (off by default) haircuts the tax line for a set term and reverts to full escalated tax after. Phase 2 is computed on buyout-year escalated costs + the refinance payment (balloon + capital + any accrued pref, amortized over the configurable Phase-2 bank term, default 30 yr). The rent-cliff alert compares Phase 2 to Phase 1 on that basis — an abatement expiring between the phases widens that cliff.',
+  'Rent policy and surplus: cost-recovery rent is reported as a FLOOR. When a policy rent is set (default: today\'s $700), the difference is a surplus deployed across extra seller-note principal (applied annually at year end, shrinking the balloon and therefore the Phase-2 refinance), a capital reserve balance held by the co-op (deliberately NOT netted against the refinance — a reserve that is spent is not a reserve), and non-redeemable shadow equity crediting members for the capital their above-floor rent contributes. Surplus accrues only in years 1..buyout, while the seller note is outstanding. A policy rent below the floor is reported as a shortfall and deploys nothing.',
+  'Phase-2 financing feasibility: the refinance is tested against BOTH lender constraints — maximum loan-to-value on the stabilized appraised value, and minimum debt-service coverage on buyout-year net operating income — and the supportable loan is the lesser. Any excess of the refinance burden over that amount is reported as a financing gap, which sizes the grant/equity requirement rather than leaving it to assumption. Under pure cost-recovery rent DSCR is exactly 1.00 by construction, which is precisely why a rent policy exists. Co-op blanket mortgages are commonly underwritten more conservatively than conventional multifamily; the LTV input should be set from a real lender term sheet, not a conventional benchmark.',
   'Defaults (July 2026 re-underwrite): FMV $1.25M as-is (in-place $700 rents, deferred maintenance, ~7% Class-C village cap; $1.5M is the stabilized number). Land donation $430k = the largest gift fully absorbed inside the § 170 window at these settings (30% of FMV absorbs with slack; 40% strands deduction). Basis $475k stepped-up story — confirm from the seller\'s Form 4562; a gift transfer means ~$250k carryover instead.',
   'Grants & subsidy: four buckets ordered by award probability (utility/weatherization rebates, county HOME/CHDO via the CLT, Ohio Housing Trust Fund, FHLB Cincinnati AHP), each $0 unless awarded, assumed committed at closing, and modeled as soft forgiven funding that replaces investor capital dollar-for-dollar — cutting the preferred return out of Phase-1 rents and shrinking the Phase-2 refinance. Compliance periods (HOME 20 yr, AHP 15 yr, OHTF ~15 yr) are recorded covenants, not cash flows; their rent/income limits sit at or above this model\'s cost-recovery rents, so they are compatible. CPA items: §61/§118 characterization (deferred-loan treatment assumed, basis intact) and Davis-Bacon exposure at 12+ HOME-assisted units.',
   '§ 465 at-risk limitation (enforced): the seller note is not qualified nonrecourse financing (§ 465(b)(6) excludes debt owed to the property\'s seller), so investors — REPS or not — deduct losses only up to cash invested; the excess suspends and releases against the exit gain. At the no-grant defaults the Year-1 loss sits just inside the at-risk cap; grant-funded scenarios push past it, and the model defers the excess rather than printing fictitious first-year savings.',
@@ -570,7 +676,60 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const balloonBeyondTerm = inputs.balloonYear >= inputs.noteTermYears;
   const lastNoteYear = balloonBeyondTerm ? inputs.noteTermYears : inputs.balloonYear;
 
+  // ---- Capital, preferred return and Year-1 opex -------------------------------
+  // Computed here (ahead of amortization) so the rent-policy surplus can be
+  // derived and fed back as extra principal on the seller note.
+  const opexYear1 = opexAt(inputs, 1);
+  const opexBuyoutYear = opexAt(inputs, inputs.balloonYear + 1);
+
+  const totalNewCapex = inputs.capexRoofStruct + inputs.capexParkingLand + inputs.capexAppliances;
+  // Grants are soft funding (never repaid, basis intact — CPA to confirm
+  // §61/§118). Timing decides where they land:
+  //   at closing → replace investor capital 1:1 (lowers both phases);
+  //   during the hold (default) → applied at the buyout, shrinking the
+  //   Phase-2 refinance only. Each clamped at what it offsets.
+  const grantsRequested =
+    inputs.grantEnergyRebates + inputs.grantCountyHome + inputs.grantOhioTrust + inputs.grantFhlbAhp;
+  const capitalNeed = downPayment + totalNewCapex;
+  const grantsAtClosingApplied = inputs.grantsAtClosing
+    ? Math.min(grantsRequested, capitalNeed)
+    : 0;
+  const capitalRequired = capitalNeed - grantsAtClosingApplied;
+  const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
+  const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
+  const accruedPrefAtExit = inputs.prefCurrentPay ? 0 : prefAnnual * lastNoteYear;
+
+  const phase1AnnualDebtService = monthlyPmt * 12;
+  const phase1AnnualRevenueReq = phase1AnnualDebtService + opexYear1.total + prefInRent;
+  const occupancy = 1 - inputs.vacancyRate / 100;
+  // The cost-recovery FLOOR — what rent would have to be to exactly break even.
+  const phase1MonthlyRent = phase1AnnualRevenueReq / inputs.units / 12 / occupancy;
+
+  // ---- Rent policy & surplus deployment ---------------------------------------
+  // Surplus runs only while the seller note does (years 1..balloonYear); after
+  // the takeout the investors are gone and the co-op is on a bank loan.
+  const surplusYears = Math.max(0, Math.min(inputs.balloonYear, lastNoteYear));
+  // The policy rent is a FLOOR ON RENT, not a cap: a co-op cannot elect to
+  // collect less than its costs. The rent actually charged is the greater of the
+  // policy and the cost floor, so surplus is never negative. When the policy
+  // sits BELOW the cost floor the promise simply cannot be honored at these
+  // assumptions — flagged, with the increase the tenants would actually face.
+  const policyBelowCostFloor =
+    inputs.rentPolicyEnabled && inputs.policyMonthlyRent < phase1MonthlyRent - 0.005;
+  const effectivePhase1Rent = inputs.rentPolicyEnabled
+    ? Math.max(inputs.policyMonthlyRent, phase1MonthlyRent)
+    : phase1MonthlyRent;
+  const annualRevenueAtPolicy = effectivePhase1Rent * inputs.units * 12 * occupancy;
+  const annualSurplus = Math.max(0, annualRevenueAtPolicy - phase1AnnualRevenueReq);
+  const principalShare = clamp01(inputs.surplusToPrincipalPct / 100);
+  const reservesShare = Math.min(clamp01(inputs.surplusToReservesPct / 100), 1 - principalShare);
+  const shadowShare = Math.max(0, 1 - principalShare - reservesShare);
+  const toPrincipalPerYear = annualSurplus * principalShare;
+  const toReservesPerYear = annualSurplus * reservesShare;
+  const toShadowEquityPerYear = annualSurplus * shadowShare;
+
   const amortSchedule: AmortRow[] = [];
+  let extraPrincipalTotal = 0;
   {
     let balance = financedPrincipal;
     const r = noteRate / 12;
@@ -584,6 +743,14 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
         principalPaid += principal;
         balance -= principal;
       }
+      // Surplus-funded extra principal is applied once at year end (the co-op
+      // sweeps its operating surplus annually, not monthly).
+      if (year <= surplusYears && toPrincipalPerYear > 0 && balance > 0.005) {
+        const extra = Math.min(toPrincipalPerYear, balance);
+        principalPaid += extra;
+        balance -= extra;
+        extraPrincipalTotal += extra;
+      }
       amortSchedule.push({
         year,
         annualPayment: interestPaid + principalPaid,
@@ -594,7 +761,17 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
       });
     }
   }
+  // Balloon = whatever the schedule actually leaves outstanding at the buyout.
+  // (Was the closed-form remainingBalance(); extra principal makes that wrong.)
+  const balloonRow = amortSchedule[inputs.balloonYear - 1];
   const balloonBalance =
+    balloonBeyondTerm || financedPrincipal <= 0
+      ? 0
+      : balloonRow
+        ? Math.max(0, balloonRow.endingBalance)
+        : 0;
+  // Same balloon with NO surplus applied — the "what the policy bought" baseline.
+  const balloonNoPolicy =
     balloonBeyondTerm || financedPrincipal <= 0
       ? 0
       : Math.max(0, remainingBalance(noteRate, noteMonths, financedPrincipal, inputs.balloonYear * 12));
@@ -734,30 +911,8 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   };
 
   // ---- Tenant / rent requirement (escalated opex) -----------------------------
-  const opexYear1 = opexAt(inputs, 1);
-  const opexBuyoutYear = opexAt(inputs, inputs.balloonYear + 1);
-
-  const totalNewCapex = inputs.capexRoofStruct + inputs.capexParkingLand + inputs.capexAppliances;
-  // Grants are soft funding (never repaid, basis intact — CPA to confirm
-  // §61/§118). Timing decides where they land:
-  //   at closing → replace investor capital 1:1 (lowers both phases);
-  //   during the hold (default) → applied at the buyout, shrinking the
-  //   Phase-2 refinance only. Each clamped at what it offsets.
-  const grantsRequested =
-    inputs.grantEnergyRebates + inputs.grantCountyHome + inputs.grantOhioTrust + inputs.grantFhlbAhp;
-  const capitalNeed = downPayment + totalNewCapex;
-  const grantsAtClosingApplied = inputs.grantsAtClosing
-    ? Math.min(grantsRequested, capitalNeed)
-    : 0;
-  const capitalRequired = capitalNeed - grantsAtClosingApplied;
-  const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
-  const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
-  const accruedPrefAtExit = inputs.prefCurrentPay ? 0 : prefAnnual * lastNoteYear;
-
-  const phase1AnnualDebtService = monthlyPmt * 12;
-  const phase1AnnualRevenueReq = phase1AnnualDebtService + opexYear1.total + prefInRent;
-  const occupancy = 1 - inputs.vacancyRate / 100;
-  const phase1MonthlyRent = phase1AnnualRevenueReq / inputs.units / 12 / occupancy;
+  // (capital, pref and opex are computed ABOVE the note amortization, because
+  // the rent-policy surplus feeds extra principal back into that schedule.)
 
   const burdenBeforeGrants = balloonBalance + capitalRequired + accruedPrefAtExit;
   const grantsAtBuyoutApplied = inputs.grantsAtClosing
@@ -772,6 +927,77 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const phase2MonthlyRent = phase2AnnualRevenueReq / inputs.units / 12 / occupancy;
   const rentJumpPct =
     phase1MonthlyRent > 0 ? ((phase2MonthlyRent - phase1MonthlyRent) / phase1MonthlyRent) * 100 : 0;
+  // Phase 2 obeys the same rule: charge the greater of the policy and the cost
+  // floor. Where the policy binds in both phases, tenants see a genuinely flat
+  // rent across the buyout and the cliff disappears from their experience.
+  const effectivePhase2Rent = inputs.rentPolicyEnabled
+    ? Math.max(inputs.policyMonthlyRent, phase2MonthlyRent)
+    : phase2MonthlyRent;
+
+  // ---- Surplus plan (reported) -------------------------------------------------
+  // Reserves accumulate as the co-op's OWN cash and are deliberately NOT netted
+  // against the refinance — the point of a reserve is to still exist afterwards.
+  // Extra principal has already shrunk the balloon inside the amortization above.
+  const surplus: SurplusPlan = {
+    enabled: inputs.rentPolicyEnabled,
+    policyMonthlyRent: inputs.policyMonthlyRent,
+    costFloorMonthlyRent: phase1MonthlyRent,
+    annualRevenueAtPolicy,
+    phase1RequiredRevenue: phase1AnnualRevenueReq,
+    annualSurplus,
+    effectivePhase1Rent,
+    effectivePhase2Rent,
+    policyBelowCostFloor,
+    shortfallPerUnitMonth: policyBelowCostFloor ? phase1MonthlyRent - inputs.policyMonthlyRent : 0,
+    years: surplusYears,
+    toPrincipalPerYear,
+    toReservesPerYear,
+    toShadowEquityPerYear,
+    principalPct: principalShare * 100,
+    reservesPct: reservesShare * 100,
+    shadowEquityPct: shadowShare * 100,
+    extraPrincipalTotal,
+    reservesBalanceAtBuyout: toReservesPerYear * surplusYears,
+    shadowEquityAtBuyout: toShadowEquityPerYear * surplusYears,
+    balloonWithoutPolicy: balloonNoPolicy,
+    balloonReduction: Math.max(0, balloonNoPolicy - balloonBalance),
+  };
+
+  // ---- Phase-2 financing feasibility ------------------------------------------
+  // The takeout test the model used to skip entirely. Revenue is measured at the
+  // POLICY rent when one is set; under pure cost recovery, revenue equals the
+  // requirement by construction and DSCR pins at exactly 1.00 — which is the
+  // honest finding, not a rounding artifact: no lender refinances a break-even.
+  const phase2Revenue = effectivePhase2Rent * inputs.units * 12 * occupancy;
+  const phase2NOI = phase2Revenue - opexBuyoutYear.total;
+  const phase1NOI = annualRevenueAtPolicy - opexYear1.total;
+  const dscr = phase2AnnualDebtService > 0 ? phase2NOI / phase2AnnualDebtService : Infinity;
+  const phase1Dscr =
+    phase1AnnualDebtService > 0 ? phase1NOI / phase1AnnualDebtService : Infinity;
+  const maxLoanByLtv = inputs.stabilizedValue * (inputs.maxLtvPct / 100);
+  const maxLoanByDscr =
+    inputs.minDscr > 0 && phase2NOI > 0
+      ? pvOfAnnuity(refiRate, inputs.phase2AmortYears * 12, phase2NOI / inputs.minDscr / 12)
+      : 0;
+  const supportableLoan = Math.max(0, Math.min(maxLoanByLtv, maxLoanByDscr));
+  const feasibility: FeasibilityMetrics = {
+    stabilizedValue: inputs.stabilizedValue,
+    refinanceBurden: phase2RefinanceBurden,
+    ltv: inputs.stabilizedValue > 0 ? phase2RefinanceBurden / inputs.stabilizedValue : 0,
+    maxLtv: inputs.maxLtvPct / 100,
+    ltvPass: phase2RefinanceBurden <= maxLoanByLtv + 0.5,
+    phase2NOI,
+    phase2DebtService: phase2AnnualDebtService,
+    dscr,
+    minDscr: inputs.minDscr,
+    dscrPass: dscr >= inputs.minDscr - 1e-9,
+    phase1Dscr,
+    maxLoanByLtv,
+    maxLoanByDscr,
+    supportableLoan,
+    financingGap: Math.max(0, phase2RefinanceBurden - supportableLoan),
+    bindingConstraint: maxLoanByDscr < maxLoanByLtv ? 'dscr' : 'ltv',
+  };
 
   const tenant: TenantMetrics = {
     opexYear1,
@@ -807,7 +1033,7 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
     lastNoteYear,
   });
 
-  return { inputs, seller, investor, tenant, amortSchedule };
+  return { inputs, seller, investor, tenant, surplus, feasibility, amortSchedule };
 }
 
 // ----------------------------------------------------------------------------

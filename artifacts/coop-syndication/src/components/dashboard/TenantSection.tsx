@@ -5,8 +5,16 @@ import { InfoTooltip } from './InfoTooltip';
 import { AlertTriangle } from 'lucide-react';
 
 export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltips: typeof TOOLTIPS }) {
-  const { tenant, inputs } = model;
-  const isCliff = tenant.isRentCliff;
+  const { tenant, inputs, surplus } = model;
+  // Under a rent policy the headline is what tenants ACTUALLY pay (the greater
+  // of the policy and the cost floor); the floor is shown beneath it. The cliff
+  // alert follows the paid rents, not the floors — a policy that binds in both
+  // phases means tenants experience no step at all.
+  const policyOn = surplus.enabled;
+  const paidPhase1 = policyOn ? surplus.effectivePhase1Rent : tenant.phase1MonthlyRent;
+  const paidPhase2 = policyOn ? surplus.effectivePhase2Rent : tenant.phase2MonthlyRent;
+  const paidJumpPct = paidPhase1 > 0 ? ((paidPhase2 - paidPhase1) / paidPhase1) * 100 : 0;
+  const isCliff = policyOn ? paidJumpPct > 10 : tenant.isRentCliff;
   const o1 = tenant.opexYear1;
   const o2 = tenant.opexBuyoutYear;
   const p2Year = inputs.balloonYear + 1;
@@ -29,14 +37,18 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
   // The Phase-2 jump accumulates over the whole Phase-1 period — show the
   // equivalent annual drift so a 5-year 12% move reads as ~2.4%/yr, not a cliff.
   const annualizedJump =
-    tenant.phase1MonthlyRent > 0 && inputs.balloonYear > 0
-      ? (Math.pow(tenant.phase2MonthlyRent / tenant.phase1MonthlyRent, 1 / inputs.balloonYear) - 1) * 100
+    paidPhase1 > 0 && inputs.balloonYear > 0
+      ? (Math.pow(paidPhase2 / paidPhase1, 1 / inputs.balloonYear) - 1) * 100
       : 0;
 
   return (
     <section className="flex flex-col space-y-4">
       <div className="border-b border-border pb-2">
-        <h2 className="text-[17px] font-medium tracking-wide text-foreground">Tenant &mdash; Cost-Recovery Rent, Both Phases</h2>
+        <h2 className="text-[17px] font-medium tracking-wide text-foreground">
+          {policyOn
+            ? 'Tenant — Rent Charged vs Cost Floor, Both Phases'
+            : 'Tenant — Cost-Recovery Rent, Both Phases'}
+        </h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -47,11 +59,24 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
         </div>
 
         <div className="bg-card border border-border p-6 rounded-md flex flex-col items-center justify-center space-y-2 text-center">
-          <span className="text-[14px] uppercase tracking-widest text-muted-foreground font-semibold">Phase 1 Rent <InfoTooltip text={tooltips.requiredRent} /></span>
-          <span className="text-3xl font-light tabular-nums text-foreground">{formatCurrency(tenant.phase1MonthlyRent)}</span>
+          <span className="text-[14px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Phase 1 Rent <InfoTooltip text={policyOn ? tooltips.rentPolicy : tooltips.requiredRent} />
+          </span>
+          <span className="text-3xl font-light tabular-nums text-foreground">{formatCurrency(paidPhase1)}</span>
           <span className="text-[13px] text-muted-foreground uppercase tracking-widest">Years 1&ndash;{inputs.balloonYear} (Year-1 costs)</span>
-          <span className={`text-[14px] font-medium ${tenant.rentDelta <= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {tenant.rentDelta > 0 ? '+' : ''}{formatCurrency(tenant.rentDelta)} vs current
+          {policyOn && (
+            <span className="text-[12px] text-muted-foreground">
+              cost floor {formatCurrency(surplus.costFloorMonthlyRent)}
+              {surplus.annualSurplus > 0 && (
+                <span className="text-emerald-500"> &middot; {formatCurrency(surplus.annualSurplus)}/yr surplus</span>
+              )}
+              {surplus.policyBelowCostFloor && (
+                <span className="text-destructive"> &middot; policy {formatCurrency(surplus.shortfallPerUnitMonth)} short</span>
+              )}
+            </span>
+          )}
+          <span className={`text-[14px] font-medium ${paidPhase1 - inputs.currentRent <= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+            {paidPhase1 - inputs.currentRent > 0 ? '+' : ''}{formatCurrency(paidPhase1 - inputs.currentRent)} vs current
           </span>
         </div>
 
@@ -65,10 +90,13 @@ export function TenantSection({ model, tooltips }: { model: DealMetrics; tooltip
             </div>
           )}
           <span className={`text-[14px] uppercase tracking-widest font-semibold ${isCliff ? 'text-destructive' : 'text-emerald-500/80'}`}>Phase 2 Rent</span>
-          <span className="text-3xl font-light tabular-nums font-bold">{formatCurrency(tenant.phase2MonthlyRent)}</span>
+          <span className="text-3xl font-light tabular-nums font-bold">{formatCurrency(paidPhase2)}</span>
           <span className={`text-[13px] uppercase tracking-widest ${isCliff ? 'text-destructive/80' : 'text-emerald-500/60'}`}>Year {p2Year}+ (escalated costs) <InfoTooltip text={tooltips.escalators} /></span>
+          {policyOn && (
+            <span className="text-[12px] opacity-80">cost floor {formatCurrency(tenant.phase2MonthlyRent)}</span>
+          )}
           <span className="text-[14px] font-medium">
-            {tenant.rentJumpPct > 0 ? '+' : ''}{formatPercent(tenant.rentJumpPct)} vs Phase 1 &asymp; {formatPercent(annualizedJump)}/yr drift
+            {paidJumpPct > 0 ? '+' : ''}{formatPercent(paidJumpPct)} vs Phase 1 &asymp; {formatPercent(annualizedJump)}/yr drift
           </span>
         </div>
       </div>
