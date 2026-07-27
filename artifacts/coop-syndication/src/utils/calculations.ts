@@ -401,6 +401,8 @@ export interface InvestorMetrics {
   exit: {
     year: number;
     salePrice: number;             // formula price for the property (balloon + capital)
+    depreciableBasis: number;      // contract price + new CapEx (NOT investor.purchaseBasis)
+    totalDepreciationTaken: number;// Y1 bonus + straight line through the exit year
     adjustedBasisAtExit: number;
     gain: number;
     exitOrdinary: number;          // § 1245 tranche at investor marginal rate
@@ -559,7 +561,7 @@ export interface DealMetrics {
 
 export const TOOLTIPS = {
   recapture453i:
-    'Past depreciation is taxed at up to 25% as sale payments arrive — it is NOT all due in year one for a building depreciated the normal way. For your CPA: no § 453(i) acceleration applies to straight-line residential realty; unrecaptured § 1250 gain spreads over the installments, recognized first within each payment (Reg. § 1.453-12).',
+    'PAUL\'S RECAPTURE, IN ORDER. Decades of depreciation drove his basis to nearly zero, so almost the entire price is gain. That gain splits into two buckets: the part equal to depreciation he actually took (unrecaptured § 1250, taxed at up to 25%) and the rest (long-term capital gain at 15%/20%). The crucial mechanic is TIMING and ORDERING. Timing: under the installment method he recognizes gain only as principal arrives, NOT all at closing — there is no § 453(i) acceleration here, because § 453(i) reaches ordinary § 1245/§ 1250 recapture and a building depreciated straight-line since 1993 generates none. Ordering: within each year\'s recognized gain the 25% dollars come out FIRST (Reg. § 1.453-12), so the early years are the expensive ones per dollar and the cheaper 15%/20% dollars land last — typically in the balloon year. This is why Year-1 tax looks low relative to the whole: the 25% bucket is being consumed in order, not deferred. The practical consequence for the seller: the balloon year is the big tax year, and the § 170 deduction is most valuable if it is still available to meet it.',
   grossProfitPct:
     'The share of every dollar of principal collected that counts as taxable profit. For your CPA: asset-level basis — the land basis follows the CLT gift, the building\'s adjusted basis offsets the co-op sale; two assets, two counterparties, no § 1011(b) bargain element.',
   charitable170:
@@ -582,10 +584,12 @@ export const TOOLTIPS = {
     'Answers "how are we really comparing these?" Instead of just discounting, it reinvests each path\'s entire after-tax cash stream at the seller\'s after-tax reinvestment rate (the discount-rate slider) and shows the wealth each leaves in the horizon year. This makes the reinvestment assumption explicit — it is exactly the scenario where the seller takes the cash-sale proceeds and invests them at that rate. It ranks paths identically to NPV (terminal = NPV × (1 + rate)^years); the point is to show the reinvestment head-to-head in plain dollars.',
   saleCosts:
     'Transaction costs. An open-market cash sale pays a broker + closing (~5–6%). The installment note and the cash-plus-donation deal are DIRECT sales to the co-op — no broker, just legal/title (~1%). On a $1.75M property the avoided broker commission alone is ~$90k, which is often larger than the NPV gap — a real, under-appreciated advantage of the direct structured deal.',
+  npvMethod:
+    'HOW EVERY NPV IN THIS TOOL IS COMPUTED, so the three rows are comparable. (1) All flows are AFTER TAX — each path\'s own tax is subtracted before discounting. (2) All are discounted at the seller\'s after-tax reinvestment rate (the discount-rate slider), the return he could actually earn on money in hand. (3) YEAR 1 IS TIME ZERO in every row: closing-day money is not discounted, because all three paths receive their first dollars at closing. Discounting the note\'s down payment a full year while leaving the cash paths undiscounted understated the note, and was fixed in V5.3.4. (4) The straight-cash row is a single closing-day flow, so its NPV equals its nominal by construction — that is not a bug. (5) The cash+donation row is closing-day proceeds plus the later-year charitable deduction benefits, each discounted from its own year. (6) The installment row discounts the full after-tax schedule, including post-balloon years whose only flow is a charitable deduction benefit. (7) Wealth-in-Year-N is the same information restated: terminal = NPV × (1+rate)^N, so it ranks paths identically — its purpose is to make the reinvestment assumption explicit in dollars rather than leave it implicit in a rate.',
   discountRateAfterTax:
     'The NPV column discounts AFTER-TAX cash flows at the seller\'s after-tax opportunity cost (the "discount rate" slider). Read the 6% note coupon after tax: at ordinary rates it nets ~4.4%, so at a 5% after-tax discount the deferred principal loses a little present value each year — which is why the installment NPV sits below its nominal and only slightly above a bifurcated cash sale. Lower the discount rate toward a realistic after-tax alternative (3–4%) and the note wins decisively; the tax deferral, bracket-smoothing, and NIIT avoidance are on top of that.',
   exitTax:
-    'Five years of write-offs lower the property\'s tax basis, so the buyout triggers a tax bill — the write-offs are a deferral, not a gift. How much is taxed at high ordinary rates vs. 25%/15% depends on the negotiated exit price allocation (see the "Exit value on short-life items" slider — worth 1.5–2.5 points of IRR). For your CPA: § 1245 ordinary recapture on cost-seg/short-life property; unrecaptured § 1250 on the shell.',
+    'THE WRITE-OFFS ARE A LOAN, NOT A GIFT — this is where they are repaid. Every dollar of depreciation the investors deducted reduced the property\'s tax basis by a dollar, so at the buyout those same dollars come back as gain. Mechanically: gain = formula sale price − (purchase basis − all depreciation taken). Because bonus depreciation front-loads roughly 75% of the write-off into Year 1, basis is heavily eroded by Year 5 and the gain is large even though the price is only balloon + capital. The gain is then taxed in three tranches, IN THIS ORDER: (1) ORDINARY, at the investor\'s full marginal rate, up to short-life (cost-seg, appliance, site) depreciation × the negotiated exit allocation — this is § 1245 recapture and it is the expensive tranche; (2) 25%, on the remainder up to total depreciation taken — unrecaptured § 1250; (3) 15%, on anything above that — true appreciation, which a formula-price exit largely forecloses. Flat state tax applies to the whole gain. The biggest lever is the exit-allocation slider: five-year-old appliances justify a low number, and moving it is worth 1.5–2.5 points of IRR. Negotiate that schedule in the buyout agreement — it is not an afterthought.',
   exitAllocation:
     'At buyout, how much of the price is attributed to appliances/site work (taxed at high ordinary rates) versus the building (25%/15%). Five-year-old appliances justify a low number — this is a negotiated schedule in the buyout agreement, not an afterthought.',
   noteMechanics:
@@ -603,7 +607,7 @@ export const TOOLTIPS = {
   ohioBID:
     'Ohio\'s Business Income Deduction: the first $250k/yr of business income is state-tax-free, 3% flat above. Treating the note income and rental profits as business income cuts the seller\'s Ohio tax roughly in half — but the characterization needs your CPA\'s sign-off, which is why this is a toggle.',
   pikPref:
-    'ON: investors are paid their return each year from rents. OFF: the return accrues and is paid at the buyout instead — Phase-1 rents drop by the pref amount, and the buyout loan grows by the accrued total. Same investor economics, shifted in time; this is the tenant-affordability relief valve.',
+    'WHAT PIK IS. "Paid in kind" means the investors\' yearly return is not paid in cash — it is added to what the co-op owes them, and that larger balance then earns the return too. It COMPOUNDS. ON (current-pay): investors are paid each year out of rent, so rent carries the preferred return. OFF (PIK): nothing is paid during the hold, Phase-1 rent drops by the full preferred amount, and the whole accumulated sum is paid at the buyout out of the refinance. THE TRADE, PLAINLY: PIK is the single strongest lever for Phase-1 rent, and it is NOT free — it moves the cost onto the Year-5 refinance and charges compound interest for the privilege. At the defaults, PIK cuts Phase-1 rent by about $64/unit/month but grows the takeout by roughly $106,000, which is MORE than the ~$92,000 of rent it saved, because the unpaid preferred earns preferred. It also pushes the loan-to-value and coverage ratios the wrong way at precisely the moment the deal is most fragile — the refinance is this deal\'s binding constraint, not Phase-1 rent. Use PIK when tenants need immediate relief and you have a concrete plan (grants, member shares, faster principal) to shrink the takeout before Year 5. Do not use it to make a launch pro forma look good. Investors are taxed on the accrued preferred as ORDINARY income when it is finally paid, not as capital gain.',
   escalators:
     'Operating costs inflate: water/sewer 8%/yr (village ordinance through 2027, PFAS pressure after), insurance 8%/yr, property taxes and management 3%/yr, other lines 2.5%/yr. Phase-2 rent is computed on buyout-year costs — flat-cost models understate it badly.',
   cashOffer:
@@ -764,7 +768,19 @@ export function calculateDealMetrics(inputs: DealInputs): DealMetrics {
   const capitalRequired = capitalAfterShares - grantsAtClosingApplied;
   const prefAnnual = capitalRequired * (inputs.investorPrefReturn / 100);
   const prefInRent = inputs.prefCurrentPay ? prefAnnual : 0;
-  const accruedPrefAtExit = inputs.prefCurrentPay ? 0 : prefAnnual * lastNoteYear;
+  // Investors are taken out at the BUYOUT, which is not necessarily when the
+  // seller note retires: if the note fully amortizes first (balloonYear >=
+  // noteTermYears) there is no balloon, but the investors are still
+  // outstanding and still earning. Accrual must run to the buyout, not to
+  // lastNoteYear — using the note term understated the accrual in that case.
+  const investorExitYear = Math.max(1, inputs.balloonYear);
+  // TRUE PIK COMPOUNDS. "Paid in kind" means the unpaid preferred is added to
+  // the investors' balance and thereafter earns preferred itself; simple
+  // accrual (capital x rate x years) is a different, cheaper instrument and
+  // understates what the co-op must refinance. See ANALYSIS.md A.20.
+  const accruedPrefAtExit = inputs.prefCurrentPay
+    ? 0
+    : capitalRequired * (Math.pow(1 + inputs.investorPrefReturn / 100, investorExitYear) - 1);
 
   const phase1AnnualDebtService = monthlyPmt * 12;
   const phase1AnnualRevenueReq = phase1AnnualDebtService + opexYear1.total + prefInRent;
@@ -1297,7 +1313,11 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
   const invRate = inputs.investorMarginalRate / 100;
   const stateRate = inputs.stateTaxRate / 100;
   const localRate = inputs.localTaxRate / 100;
-  const exitYear = ctx.lastNoteYear;
+  // Investors exit at the BUYOUT by design, which is when the co-op refinances
+  // and returns their capital — not when the seller note happens to retire.
+  // (These coincide in the normal case where the balloon precedes the note
+  // term; they diverge only when the note fully amortizes first.)
+  const exitYear = Math.max(1, inputs.balloonYear);
   const exitAllocPct = inputs.exitShortLifeAllocationPct / 100;
 
   const costSegBonus = ctx.contractPrice * D.COST_SEG_SHORT_LIFE_PCT;
@@ -1480,6 +1500,8 @@ function buildInvestorMetrics(inputs: DealInputs, ctx: InvestorCtx): InvestorMet
     exit: {
       year: exitYear,
       salePrice,
+      depreciableBasis: purchaseBasisTotal,
+      totalDepreciationTaken: totalDepTaken,
       adjustedBasisAtExit,
       gain: exitGain,
       exitOrdinary,
