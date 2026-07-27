@@ -704,3 +704,46 @@ That is the first configuration in this project's history that clears **both** p
 This reorders `docs/CLOSE-OR-RESTRUCTURE.md`. If the no-investor path is the plan, **Tier 1.2's tax-counsel memo shrinks dramatically** — no syndicate means no § 385 debt-vs-equity exposure, no § 704(b) allocation question, and no Reg D offering on the investor side (member share offerings still need securities review). The largest unmodelled failure mode identified in A.22 substantially disappears.
 
 What becomes *more* critical: the § 538 term sheet, Home Inc. as a subordinate-loan or guarantee partner, and grant timing — because with no investor capital there is no buffer if a grant slips.
+
+## A.24 Correction to A.23 — the no-investor result was a confounded comparison
+
+A.23.4 presented a stacked configuration (investors off **+** CapEx cut to $0 **+** down payment cut 15%→5%) and attributed the improvement to removing the syndicate. That was three changes at once, and the attribution was wrong. Raised by the project owner: *"does this actually end up cheaper without investors, or is it mostly forgone CapEx?"* — mostly forgone CapEx.
+
+### The 2×2, properly isolated
+
+| | Phase-1 floor | Refinance | Closing gap | Phase-2 gap |
+|---|---|---|---|---|
+| **A** investors ON, $180k CapEx, 15% down | $832 | $854,750 | $0 | $142,458 |
+| **B** investors OFF, $180k CapEx, 15% down | $767 | $591,750 | **$263,000** | $98,625 |
+| **C** investors ON, $0 CapEx, 5% down | $792 | $662,368 | $0 | $110,395 |
+| **D** investors OFF, $0 CapEx, 5% down | $792 | $661,368 | $1,000 | $110,228 |
+
+**C and D are the same deal** — $792 either way, refinance $1,000 apart. Once the capital need falls to $41,000 and member shares cover $40,000, investors were contributing $1,000; removing them changes nothing. The entire A→D improvement is the CapEx and down-payment cut.
+
+**Row B is not an available alternative.** It looks best on rent and refinance precisely because it leaves $263,000 unfunded — it is "what if the money were free," not a plan.
+
+### What survives: investor capital is the most expensive source
+
+| Source of $263,000 | 5-yr carry | Total cost |
+|---|---|---|
+| Grant / member share | $0 | $263,000 (1.00×) |
+| Home Inc. / CDFI subordinate loan @3% | $39,450 | $302,450 (1.15×) |
+| CDFI @5% | $65,750 | $328,750 (1.25×) |
+| **Investor preferred @7%** | **$92,050** | **$355,050 (1.35×)** |
+
+So the correct conclusion is **not** "drop investors and the deal gets cheaper." It is: (a) whether to renovate at closing is a separate decision, and it is the one that moves the rent floor; (b) *if* capital is needed, source it from shares, grants or a subordinate loan before equity. A.23's headline conflated the two.
+
+### Is the syndicate double-dipping? No — but the intuition points at something real
+
+Also raised: *"were they deducting the roof but getting paid for it in whole at buyout?"*
+
+Following the dollar at configuration A: depreciation taken **$423,182**; basis falls $1,000,000 → $576,818; exit gain **$277,932** of which **$0 is taxed at the 15% appreciation rate** — every dollar is recaptured depreciation ($147,500 ordinary § 1245 + $130,432 at 25%), exit tax **$91,876**, net to investors $171,124 against $263,000 contributed plus $92,050 of preferred. **The deduction is fully clawed back; there is no tax double-dip.**
+
+Two real observations behind the question:
+
+1. **Investors depreciate the whole property, not their share.** Depreciable basis is $1,000,000 (contract price + CapEx) against a $263,000 contribution — they fund 26% and claim 100% of the shield. Legitimate (the seller note is the leverage and they own the entity), but it is the actual engine of the returns and worth stating plainly.
+2. **The subsidy attaches to the investor, not to the building.** The co-op repays $263,000 plus 7% whether or not the investor ever banks the deduction. The federal money reaches the co-op only *indirectly* — by letting investors accept 7% where market equity for illiquid, subordinated, single-asset real estate with refinance risk would want 12–18%. Internally consistent, and it collapses if the shield is unusable, which is exactly the A.23 premise.
+
+### Standing rule added
+
+Never present a stacked configuration as evidence for a single lever. Any claim that a toggle caused an improvement must show the toggle moved **alone**, and any configuration with an unfunded gap must be labelled as not-an-alternative rather than quoted as a result.
