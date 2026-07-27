@@ -429,3 +429,81 @@ The effect is large. At FMV $1.8M with a real $1.6M cash offer, the note moves f
 ### A.19.5 Cash at closing
 
 Added `cashAtClosing` to every comparison scenario and a column to the seller table. NPV and terminal wealth answer "what am I worth in the end"; sellers usually ask "what do I bank next month" first, and the installment note's answer is deliberately much smaller (down payment less Year-1 tax and legal/title) with the remainder arriving over the term with interest. At FMV $1.8M / $1.6M offer: straight cash **$1,120,485**, cash+donation **$1,120,683**, installment **$236,517**. Showing this honestly is better than letting a seller discover it at the closing table.
+
+## A.20 V5.10 — audit of NPV, both recapture mechanics, and PIK (two PIK corrections)
+
+Requested as a comprehension check across four mechanics. Each was re-derived against the engine rather than described from memory; two real defects were found in PIK and fixed. Seller recapture, investor recapture and the NPV conventions audited **clean**.
+
+### A.20.1 NPV — one convention, applied to all three rows
+
+| | Cash at closing | Nominal | NPV | Wealth Yr 20 |
+|---|---|---|---|---|
+| Straight cash sale | $883,535 | $883,535 | $883,535 | $2,344,281 |
+| Cash sale + CLT donation | $675,958 | $702,508 | $698,947 | $1,854,515 |
+| Installment + CLT donation | $147,365 | $872,899 | $758,147 | $2,011,590 |
+
+The rules, now surfaced in a `npvMethod` tooltip on the comparison card:
+
+1. **Every flow is after tax** — each path's own tax is subtracted before discounting.
+2. **One discount rate**: the seller's after-tax reinvestment rate (the slider).
+3. **Year 1 is time zero in every row.** All three paths receive their first dollars at closing, so closing-day money is undiscounted. (Discounting the note's down payment a full year while leaving the cash rows undiscounted was the V5.3.4 bug.) Verified independently: recomputing the installment NPV as `Σ cf_i /(1+r)^i − direct cost` reproduces the engine's figure to the dollar.
+4. **Straight cash NPV = nominal by construction** — a single closing-day flow. Not a bug.
+5. **Cash+donation** = closing-day proceeds plus later-year § 170 benefits, each discounted from its own year.
+6. **Installment** discounts the whole after-tax schedule, including post-balloon years whose only flow is a charitable deduction benefit.
+7. **Wealth-in-Year-N = NPV × (1+r)^N** — verified for all three rows. It ranks paths identically to NPV; its only job is to state the reinvestment assumption in dollars.
+
+### A.20.2 Paul's recapture — clean, and the ordering is the point
+
+At defaults: contract price $820,000, sold adjusted basis ~$0 (a building held since 1993 is fully depreciated), gross profit $820,000, GPR 100%. Of that, **$356,250 is unrecaptured § 1250** (25% rate) and **$463,750 is LTCG**.
+
+Verified: recognized gain sums exactly to gross profit; the 25% bucket sums exactly to unrecaptured § 1250; and the two buckets sum to total gain.
+
+The **Reg. § 1.453-12 front-loading is visible in the schedule** — 25% dollars are consumed first, and the cheaper LTCG dollars only appear once the 25% bucket is exhausted:
+
+| Year | Gain recognized | at 25% | at LTCG |
+|---|---|---|---|
+| 1 | $141,608 | $141,608 | $0 |
+| 2 | $19,756 | $19,756 | $0 |
+| 3 | $20,975 | $20,975 | $0 |
+| 4 | $22,268 | $22,268 | $0 |
+| 5 (balloon) | $615,392 | $151,642 | $463,750 |
+
+Two consequences worth stating to the seller. **There is no § 453(i) bomb**: Year-1 25%-rate gain is $141,608 of the $356,250 total, not all of it — § 453(i) reaches ordinary § 1245/§ 1250 recapture, and straight-line residential realty generates none. And **the balloon year is the big tax year**, which is exactly why § 170 capacity should still be available to meet it.
+
+### A.20.3 Investor recapture at the buyout — clean
+
+| | |
+|---|---|
+| Depreciable basis (contract price + CapEx) | $1,000,000 |
+| Depreciation taken (Y1 bonus $295,000 + SL) | $423,182 |
+| Adjusted basis at exit | $576,818 |
+| Formula sale price (balloon + capital) | $854,750 |
+| **Exit gain** | **$277,932** |
+| § 1245 ordinary @ 35% | $147,500 |
+| Unrecaptured § 1250 @ 25% | $130,432 |
+| LTCG @ 15% | $0 |
+| **Exit tax** | **$91,876** |
+
+Verified: tranches sum to the gain; the ordinary tranche is capped at short-life depreciation × the exit allocation; ordinary + 25% never exceeds depreciation taken; and the tax recomputes exactly as ordinary@marginal + 25% + 15% + flat state on the whole gain.
+
+The headline for investors: **bonus depreciation is a loan against their own future gain.** $423,182 of write-offs erodes basis by the same amount, and a price of merely balloon-plus-capital still throws off $277,932 of gain. The LTCG tranche is $0 because a formula-price exit forecloses appreciation — the entire gain is recaptured depreciation.
+
+**A naming trap fixed:** `investor.purchaseBasis` is the contract price only ($820,000), while the *depreciable* basis is contract price + CapEx ($1,000,000). Subtracting the wrong one overstates depreciation and produces a false recapture failure. The exit object now exposes `depreciableBasis` and `totalDepreciationTaken` explicitly.
+
+### A.20.4 PIK — two corrections
+
+**Correction 1 — PIK now COMPOUNDS.** The model accrued unpaid preferred as `capital × rate × years`, which is *simple* accrual. "Paid in kind" means the unpaid preferred is added to the investors' balance and thereafter earns preferred itself. At defaults that understated the accrual by **$13,821** ($92,050 simple vs **$105,871** compounded). Now `capital × ((1+rate)^years − 1)`.
+
+**Correction 2 — accrual runs to the BUYOUT, not the note term.** The accrual window used `lastNoteYear`. When the seller note fully amortizes before the buyout (`balloonYear >= noteTermYears`) there is no balloon, but the investors are still outstanding and still earning. With a 5-year note and an 8-year buyout the model accrued only 5 years. Both the accrual window and the investor exit year now follow `balloonYear`. The default case is unaffected (the two coincide).
+
+**The trade, stated plainly** — and it is worse than the old numbers implied:
+
+| | Current-pay | PIK |
+|---|---|---|
+| Phase-1 rent | $771 | **$707** |
+| Phase-2 refinance | $854,750 | **$960,621** |
+| Financing gap | $142,458 | $160,104 |
+
+PIK saves roughly **$92,050** of rent across five years and adds **$105,871** to the takeout — a **net cost of $13,821**, which is precisely the compounding. It also pushes LTV and coverage the wrong way at the moment the deal is most fragile, and the refinance — not Phase-1 rent — is this deal's binding constraint.
+
+PIK is still the strongest single lever on Phase-1 rent, and it is legitimate when tenants need immediate relief **and** there is a concrete plan (grants, member shares, faster principal, a § 538 takeout) to shrink the Year-5 burden. It is not free, and it should never be used to make a launch pro forma look good. Investors are taxed on the accrued preferred as **ordinary income** when it is finally paid.

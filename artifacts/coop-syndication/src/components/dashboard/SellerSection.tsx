@@ -142,7 +142,7 @@ export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltip
       {/* Scenario comparison */}
       <div className="bg-card border border-border rounded-md overflow-hidden">
         <div className="px-4 py-2 border-b border-border bg-muted/20">
-          <span className="text-[14px] font-medium text-foreground">Why Not Just Take Cash? &mdash; After-Tax Scenario Comparison</span>
+          <span className="text-[14px] font-medium text-foreground">Why Not Just Take Cash? &mdash; After-Tax Scenario Comparison <InfoTooltip text={tooltips.npvMethod} /></span>
           <InfoTooltip text={tooltips.discountRateAfterTax} />
         </div>
         <div className="overflow-x-auto">
@@ -154,7 +154,7 @@ export function SellerSection({ model, tooltips }: { model: DealMetrics; tooltip
                 <th className="py-3.5 px-4 font-medium">Total Tax</th>
                 <th className="py-3.5 px-4 font-medium">Cash at Closing <InfoTooltip text={tooltips.cashAtClosing} /></th>
                 <th className="py-3.5 px-4 font-medium">Nominal After-Tax</th>
-                <th className="py-3.5 px-4 font-medium">NPV After-Tax @ {formatPercent(model.inputs.discountRate)}</th>
+                <th className="py-3.5 px-4 font-medium">NPV After-Tax @ {formatPercent(model.inputs.discountRate)} <InfoTooltip text={tooltips.npvMethod} /></th>
                 <th className="py-3.5 px-4 font-medium">Wealth in Yr {seller.comparison.horizon} <InfoTooltip text={tooltips.terminalWealth} /></th>
               </tr>
             </thead>
