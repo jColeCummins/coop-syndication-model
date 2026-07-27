@@ -133,6 +133,13 @@ export function Sidebar({ inputs, dispatch }: SidebarProps) {
         </Group>
 
         <Group title="Investors & Renovation" last>
+          <SwitchRow
+            id="investors-enabled"
+            label="Use a tax-investor syndicate"
+            tip={TOOLTIPS.investorsEnabled}
+            checked={inputs.investorsEnabled}
+            onChange={(v) => update('investorsEnabled', v)}
+          />
           <SliderRow label="Investor preferred return" tip="The fixed yearly return investors earn on their money. They get this plus their money back at buyout — and no share of appreciation (the ground lease locks that in for the community)." value={inputs.investorPrefReturn} formatter={formatPercentInput} min={0} max={12} step={0.5} onChange={(v) => update('investorPrefReturn', v)} />
           <SwitchRow
             id="pref-current"

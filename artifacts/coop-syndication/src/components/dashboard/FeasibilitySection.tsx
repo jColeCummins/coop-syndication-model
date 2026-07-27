@@ -44,6 +44,27 @@ export function FeasibilitySection({ model, tooltips }: { model: DealMetrics; to
         </div>
       </div>
 
+      {!f.investorsEnabled && (
+        <div className={`rounded-md border p-4 text-[13px] ${
+          f.closingCapitalGap > 0.5 ? 'bg-destructive/10 border-destructive' : 'bg-emerald-500/10 border-emerald-500/20'
+        }`}>
+          <span className={`font-semibold ${f.closingCapitalGap > 0.5 ? 'text-destructive' : 'text-emerald-500'}`}>
+            No investor syndicate &mdash;{' '}
+            {f.closingCapitalGap > 0.5
+              ? `${formatCurrency(f.closingCapitalGap)} unfunded at closing.`
+              : 'closing is fully funded.'}
+          </span>{' '}
+          <span className="text-muted-foreground">
+            The deal needs {formatCurrency(f.capitalNeedAtClosing)} at closing (down payment + renovation).
+            Member shares cover {formatCurrency(me.totalRaised)}
+            {s.enabled ? '' : ''}; grants committed at closing cover the rest of what is funded.
+            {f.closingCapitalGap > 0.5
+              ? ' Close the gap with a subordinate CDFI or Home Inc. loan, a larger grant, a smaller down payment, or by phasing the renovation — the model will not assume capital nobody has promised.'
+              : ' No preferred return is charged to rent and no capital has to be returned at the buyout, so the Year-5 refinance carries the seller balloon alone.'}
+          </span>
+        </div>
+      )}
+
       {/* Valuation cross-check — the restricted-income reality test */}
       <div className={`rounded-md border p-4 text-[13px] ${
         f.valuationOptimism > 1.15 ? 'bg-destructive/10 border-destructive text-destructive' : 'bg-card border-border text-muted-foreground'

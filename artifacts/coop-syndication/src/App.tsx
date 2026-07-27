@@ -55,7 +55,7 @@ export default function App() {
 
           <div className="space-y-12">
             <SellerSection model={model} tooltips={TOOLTIPS} />
-            <InvestorSection model={model} tooltips={TOOLTIPS} />
+            {model.inputs.investorsEnabled && <InvestorSection model={model} tooltips={TOOLTIPS} />}
             <TenantSection model={model} tooltips={TOOLTIPS} />
             <FeasibilitySection model={model} tooltips={TOOLTIPS} />
           </div>
